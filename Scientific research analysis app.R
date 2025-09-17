@@ -30,7 +30,7 @@ required_packages <- c(
   "rmarkdown", "knitr", "factoextra", "cluster", "GGally", "psych", "nortest",
   "lmtest", "multcomp", "emmeans", "performance", "see", "report", "FactoMineR",
   "stats", "purrr", "stringr", "ggdendro", "reshape2", "MASS", "PMCMRplus",
-  "multcompView", "ggrepel", "FSA", "rcompanion", "plotrix", "styler", "lintr", "tibble"
+  "multcompView", "ggrepel", "FSA", "rcompanion", "plotrix", "tibble"
 )
 
 install_and_load(required_packages)
