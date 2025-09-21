@@ -822,7 +822,7 @@ ui <- dashboardPage(
                                              "Histogramme" = "hist"), selected = "box"),
                     radioButtons("errorType", "Barres d'erreur",
                                  choices = c("Erreur-type (SE)" = "se", 
-                                             "à‰cart-type (SD)" = "sd", 
+                                             "Ecart-type (SD)" = "sd", 
                                              "IC 95%" = "ci",
                                              "Aucune" = "none"), selected = "se"),
                     checkboxInput("colorByGroups", "Colorer par groupes statistiques", value = FALSE),
