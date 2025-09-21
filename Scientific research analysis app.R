@@ -822,7 +822,7 @@ ui <- dashboardPage(
                                              "Histogramme" = "hist"), selected = "box"),
                     radioButtons("errorType", "Barres d'erreur",
                                  choices = c("Erreur-type (SE)" = "se", 
-                                             "Ã‰cart-type (SD)" = "sd", 
+                                             "à‰cart-type (SD)" = "sd", 
                                              "IC 95%" = "ci",
                                              "Aucune" = "none"), selected = "se"),
                     checkboxInput("colorByGroups", "Colorer par groupes statistiques", value = FALSE),
@@ -855,7 +855,7 @@ ui <- dashboardPage(
                       div(style = "margin-bottom: 20px;",
                           fluidRow(
                             column(6,
-                                   selectInput("resultTypeDisplay", "Type de résultats Ã  afficher:",
+                                   selectInput("resultTypeDisplay", "Type de résultats à  afficher:",
                                                choices = list("Effets principaux" = "main",
                                                               "Interactions significatives" = "interaction"),
                                                selected = "main",
@@ -1619,8 +1619,6 @@ server <- function(input, output, session) {
       print(p)
     })
   })
-  
-  # ---- FONCTIONS DE TÉLÉCHARGEMENT ----
   
   # Téléchargement matrice de corrélation
   output$downloadCorrPlot <- downloadHandler(
