@@ -30,7 +30,7 @@ required_packages <- c(
   "rmarkdown", "knitr", "factoextra", "cluster", "GGally", "psych", "nortest",
   "lmtest", "multcomp", "emmeans", "performance", "see", "report", "FactoMineR",
   "stats", "purrr", "stringr", "ggdendro", "reshape2", "MASS", "PMCMRplus",
-  "multcompView", "ggrepel", "FSA", "rcompanion", "plotrix", "tibble"
+  "multcompView", "ggrepel", "FSA", "rcompanion", "plotrix", "tibble","questionr"
 )
 
 install_and_load(required_packages)
@@ -191,6 +191,7 @@ ui <- dashboardPage(
       menuItem("Analyses multivariées", tabName = "multivariate", icon = icon("project-diagram")),
       menuItem("Réalisation des tests statistiques", tabName = "tests", icon = icon("calculator")),
       menuItem("Comparaisons multiples PostHoc", tabName = "multiple", icon = icon("sort-amount-down")),
+      menuItem("Tableaux croisés", tabName = "crosstab", icon = icon("table")),
       menuItem("Visualisation des données", tabName = "visualization", icon = icon("chart-line")),
       menuItem("Rapport de synthèse des analyses", tabName = "report", icon = icon("file-alt")),
       hr(),
@@ -482,14 +483,6 @@ ui <- dashboardPage(
                 )
               )
       ),
-      
-      
-      
-      # UI.R
-      # Modifications:
-      # - Added pickerInput for individual labels source in PCA box (pcaLabelSourceSelect).
-      # - Added downloadButtons for each plot in PCA, HCPC, and AFD sections.
-      # - Ellipses are handled in server.R, no additional UI changes needed beyond existing quali.sup selection.
       
       
       # ---- Analyses multivariées ----
@@ -829,7 +822,7 @@ ui <- dashboardPage(
                                              "Histogramme" = "hist"), selected = "box"),
                     radioButtons("errorType", "Barres d'erreur",
                                  choices = c("Erreur-type (SE)" = "se", 
-                                             "Écart-type (SD)" = "sd", 
+                                             "Ã‰cart-type (SD)" = "sd", 
                                              "IC 95%" = "ci",
                                              "Aucune" = "none"), selected = "se"),
                     checkboxInput("colorByGroups", "Colorer par groupes statistiques", value = FALSE),
@@ -839,7 +832,7 @@ ui <- dashboardPage(
                     textInput("customXLabel", "Titre axe X", placeholder = "Nom de variable"),
                     textInput("customYLabel", "Titre axe Y", placeholder = "Nom de variable"),
                     textInput("customLegendTitle", "Titre de la légende", placeholder = "Nom de variable"),
-                    checkboxInput("rotateXLabels", "Incliner les labels X à 45°", value = TRUE),
+                    checkboxInput("rotateXLabels", "Incliner les labels à  45°", value = TRUE),
                     hr(),
                     h5("Personnalisation du thème"),
                     sliderInput("titleSize", "Taille du titre", min = 8, max = 32, value = 16),
@@ -862,7 +855,7 @@ ui <- dashboardPage(
                       div(style = "margin-bottom: 20px;",
                           fluidRow(
                             column(6,
-                                   selectInput("resultTypeDisplay", "Type de résultats à afficher:",
+                                   selectInput("resultTypeDisplay", "Type de résultats Ã  afficher:",
                                                choices = list("Effets principaux" = "main",
                                                               "Interactions significatives" = "interaction"),
                                                selected = "main",
@@ -966,6 +959,123 @@ ui <- dashboardPage(
                       div(style = "text-align: center;",
                           downloadButton("downloadMultiPlot", "Télécharger le graphique actuel (PNG)", 
                                          class = "btn-success", icon = icon("image"))
+                      )
+                    )
+                )
+              )
+      ),
+      # ---- Tableaux croisés dynamiques ----
+      tabItem(tabName = "crosstab",
+              fluidRow(
+                box(title = "Configuration du tableau croisé", status = "primary", width = 4, solidHeader = TRUE,
+                    uiOutput("crosstabRowVarSelect"),
+                    uiOutput("crosstabColVarSelect"),
+                    uiOutput("crosstabFilterVarSelect"),
+                    hr(),
+                    h5("Options d'analyse", style = "font-weight: bold; color: #337ab7;"),
+                    checkboxGroupInput("analysisOptions", "Types d'analyses :",
+                                       choices = list(
+                                         "Proportions en lignes" = "row_prop",
+                                         "Proportions en colonnes" = "col_prop", 
+                                         "Proportions totales" = "total_prop",
+                                         "Test du Chi²" = "chi_test",
+                                         "Test exact de Fisher" = "fisher_test",
+                                         "Résidus standardisés" = "residuals"
+                                       ),
+                                       selected = c("row_prop", "col_prop", "chi_test")),
+                    hr(),
+                    h5("Options graphiques", style = "font-weight: bold; color: #27ae60;"),
+                    radioButtons("plotType", "Type de graphique :",
+                                 choices = c("Histogramme groupé" = "bar",
+                                             "Histogramme empilé" = "stacked_bar",
+                                             "Graphique en secteurs" = "pie",
+                                             "Graphique mosaïque" = "mosaic"),
+                                 selected = "bar"),
+                    hr(),
+                    h5("Personnalisation", style = "font-weight: bold; color: #f39c12;"),
+                    textInput("crosstabTitle", "Titre principal :", value = ""),
+                    textInput("crosstabXLabel", "Label axe X :", value = ""),
+                    textInput("crosstabYLabel", "Label axe Y :", value = ""),
+                    sliderInput("titleSize", "Taille titre :", min = 8, max = 24, value = 14),
+                    sliderInput("axisTextSize", "Taille texte axes :", min = 6, max = 16, value = 10),
+                    sliderInput("legendTextSize", "Taille légende :", min = 6, max = 16, value = 10),
+                    checkboxInput("showPercentages", "Afficher pourcentages sur graphique", TRUE),
+                    actionButton("generateCrosstab", "Générer l'analyse", 
+                                 class = "btn-primary btn-lg", icon = icon("table"),
+                                 style = "width: 100%; margin-top: 15px;")
+                ),
+                box(title = "Résultats - Tableau croisé", status = "primary", width = 8, solidHeader = TRUE,
+                    tabBox(
+                      title = "Analyses", id = "crosstabTabs", width = 12,
+                      tabPanel("Effectifs", 
+                               DTOutput("crosstabTable"),
+                               br(),
+                               downloadButton("downloadCrosstab", "Télécharger (Excel)", 
+                                              class = "btn-success")),
+                      tabPanel("Proportions lignes", 
+                               DTOutput("crosstabRowProp"),
+                               br(),
+                               downloadButton("downloadRowProp", "Télécharger (Excel)", 
+                                              class = "btn-success")),
+                      tabPanel("Proportions colonnes", 
+                               DTOutput("crosstabColProp"),
+                               br(),
+                               downloadButton("downloadColProp", "Télécharger (Excel)", 
+                                              class = "btn-success")),
+                      tabPanel("Proportions totales", 
+                               DTOutput("crosstabTotalProp"),
+                               br(),
+                               downloadButton("downloadTotalProp", "Télécharger (Excel)", 
+                                              class = "btn-success")),
+                      tabPanel("Tests statistiques", 
+                               verbatimTextOutput("crosstabTests"),
+                               br(),
+                               downloadButton("downloadTests", "Télécharger (Excel)", 
+                                              class = "btn-success")),
+                      tabPanel("Résidus", 
+                               DTOutput("crosstabResiduals"),
+                               br(),
+                               downloadButton("downloadResiduals", "Télécharger (Excel)", 
+                                              class = "btn-success"))
+                    )
+                )
+              ),
+              fluidRow(
+                box(title = "Visualisations", status = "success", width = 12, solidHeader = TRUE,
+                    fluidRow(
+                      column(6,
+                             div(class = "box box-solid box-success",
+                                 div(class = "box-header with-border",
+                                     h4(class = "box-title", "Graphique principal")
+                                 ),
+                                 div(class = "box-body",
+                                     plotOutput("crosstabPlot", height = "500px"),
+                                     br(),
+                                     fluidRow(
+                                       column(6,
+                                              numericInput("plotWidth", "Largeur (pouces):", value = 10, min = 4, max = 20)),
+                                       column(6,
+                                              numericInput("plotHeight", "Hauteur (pouces):", value = 8, min = 4, max = 20))
+                                     ),
+                                     downloadButton("downloadPlot", "Télécharger graphique (PNG)", 
+                                                    class = "btn-info", style = "width: 100%;")
+                                 )
+                             )
+                      ),
+                      column(6,
+                             div(class = "box box-solid box-warning",
+                                 div(class = "box-header with-border",
+                                     h4(class = "box-title", "Graphique en secteurs")
+                                 ),
+                                 div(class = "box-body",
+                                     plotOutput("crosstabPiePlot", height = "500px"),
+                                     br(),
+                                     selectInput("pieVariable", "Variable pour secteurs :",
+                                                 choices = c("Variable ligne" = "row", "Variable colonne" = "col")),
+                                     downloadButton("downloadPiePlot", "Télécharger secteurs (PNG)", 
+                                                    class = "btn-warning", style = "width: 100%;")
+                                 )
+                             )
                       )
                     )
                 )
@@ -4922,6 +5032,415 @@ server <- function(input, output, session) {
       openxlsx::writeData(wb, "Donnees_completes", values$multiResultsMain)
       
       openxlsx::saveWorkbook(wb, file, overwrite = TRUE)
+    }
+  )
+  # ---- Tableaux croisés dynamiques ----
+  
+  # Variables réactives pour les tableaux croisés
+  crosstab_values <- reactiveValues(
+    contingency_table = NULL,
+    row_proportions = NULL,
+    col_proportions = NULL,
+    total_proportions = NULL,
+    chi_test = NULL,
+    fisher_test = NULL,
+    residuals = NULL,
+    current_plot = NULL,
+    current_pie_plot = NULL
+  )
+  
+  # UI pour sélection des variables
+  output$crosstabRowVarSelect <- renderUI({
+    req(values$filteredData)
+    all_cols <- names(values$filteredData)
+    selectInput("crosstabRowVar", "Variable en lignes :", choices = all_cols)
+  })
+  
+  output$crosstabColVarSelect <- renderUI({
+    req(values$filteredData)
+    all_cols <- names(values$filteredData)
+    selectInput("crosstabColVar", "Variable en colonnes :", choices = all_cols)
+  })
+  
+  output$crosstabFilterVarSelect <- renderUI({
+    req(values$filteredData)
+    fac_cols <- names(values$filteredData)[sapply(values$filteredData, is.factor)]
+    selectInput("crosstabFilterVar", "Filtrer par (optionnel) :", 
+                choices = c("Aucun" = "", fac_cols))
+  })
+  
+  # Génération des analyses
+  observeEvent(input$generateCrosstab, {
+    req(input$crosstabRowVar, input$crosstabColVar)
+    
+    showNotification("Génération des analyses en cours...", type = "message", duration = 2)
+    
+    tryCatch({
+      # Préparer les données
+      df <- values$filteredData
+      
+      # Appliquer le filtre si sélectionné
+      if (!is.null(input$crosstabFilterVar) && input$crosstabFilterVar != "") {
+        # Pour cet exemple, on prend toutes les données, mais on pourrait ajouter une UI pour sélectionner les niveaux
+        df <- df[!is.na(df[[input$crosstabFilterVar]]), ]
+      }
+      
+      # Nettoyer les données
+      df <- df[!is.na(df[[input$crosstabRowVar]]) & !is.na(df[[input$crosstabColVar]]), ]
+      
+      # Convertir en facteurs si nécessaire
+      if (!is.factor(df[[input$crosstabRowVar]])) {
+        df[[input$crosstabRowVar]] <- as.factor(df[[input$crosstabRowVar]])
+      }
+      if (!is.factor(df[[input$crosstabColVar]])) {
+        df[[input$crosstabColVar]] <- as.factor(df[[input$crosstabColVar]])
+      }
+      
+      # Tableau de contingence
+      contingency_table <- table(df[[input$crosstabRowVar]], df[[input$crosstabColVar]])
+      crosstab_values$contingency_table <- addmargins(contingency_table)
+      
+      # Proportions
+      if ("row_prop" %in% input$analysisOptions) {
+        row_prop <- prop.table(contingency_table, margin = 1) * 100
+        crosstab_values$row_proportions <- addmargins(row_prop, margin = 2)
+      }
+      
+      if ("col_prop" %in% input$analysisOptions) {
+        col_prop <- prop.table(contingency_table, margin = 2) * 100  
+        crosstab_values$col_proportions <- addmargins(col_prop, margin = 1)
+      }
+      
+      if ("total_prop" %in% input$analysisOptions) {
+        total_prop <- prop.table(contingency_table) * 100
+        crosstab_values$total_proportions <- addmargins(total_prop)
+      }
+      
+      # Tests statistiques
+      if ("chi_test" %in% input$analysisOptions) {
+        if (all(contingency_table >= 5)) {
+          crosstab_values$chi_test <- chisq.test(contingency_table)
+        } else {
+          crosstab_values$chi_test <- "Conditions non remplies (effectifs < 5)"
+        }
+      }
+      
+      if ("fisher_test" %in% input$analysisOptions) {
+        if (min(dim(contingency_table)) == 2) {
+          crosstab_values$fisher_test <- fisher.test(contingency_table)
+        } else {
+          crosstab_values$fisher_test <- "Test de Fisher disponible uniquement pour tableaux 2x2"
+        }
+      }
+      
+      # Résidus standardisés
+      if ("residuals" %in% input$analysisOptions) {
+        if (is.list(crosstab_values$chi_test)) {
+          residuals_std <- crosstab_values$chi_test$stdres
+          crosstab_values$residuals <- residuals_std
+        }
+      }
+      
+      showNotification("Analyses générées avec succès!", type = "message")
+      
+    }, error = function(e) {
+      showNotification(paste("Erreur lors de l'analyse :", e$message), type = "error")
+    })
+  })
+  
+  # Affichage des tableaux
+  output$crosstabTable <- renderDT({
+    req(crosstab_values$contingency_table)
+    datatable(as.data.frame.matrix(crosstab_values$contingency_table), 
+              options = list(scrollX = TRUE, pageLength = -1),
+              caption = "Tableau de contingence (effectifs)")
+  })
+  
+  output$crosstabRowProp <- renderDT({
+    req(crosstab_values$row_proportions)
+    datatable(round(as.data.frame.matrix(crosstab_values$row_proportions), 2), 
+              options = list(scrollX = TRUE, pageLength = -1),
+              caption = "Proportions en lignes (%)")
+  })
+  
+  output$crosstabColProp <- renderDT({
+    req(crosstab_values$col_proportions)
+    datatable(round(as.data.frame.matrix(crosstab_values$col_proportions), 2), 
+              options = list(scrollX = TRUE, pageLength = -1),
+              caption = "Proportions en colonnes (%)")
+  })
+  
+  output$crosstabTotalProp <- renderDT({
+    req(crosstab_values$total_proportions)
+    datatable(round(as.data.frame.matrix(crosstab_values$total_proportions), 2), 
+              options = list(scrollX = TRUE, pageLength = -1),
+              caption = "Proportions totales (%)")
+  })
+  
+  output$crosstabTests <- renderPrint({
+    tests_results <- list()
+    
+    if (!is.null(crosstab_values$chi_test)) {
+      if (is.list(crosstab_values$chi_test)) {
+        cat("=== TEST DU CHI-DEUX ===\n")
+        cat("Statistique X² :", round(crosstab_values$chi_test$statistic, 4), "\n")
+        cat("Degrés de liberté :", crosstab_values$chi_test$parameter, "\n") 
+        cat("p-value :", format.pval(crosstab_values$chi_test$p.value), "\n")
+        cat("Interprétation :", ifelse(crosstab_values$chi_test$p.value < 0.05, 
+                                       "Association significative", 
+                                       "Pas d'association significative"), "\n\n")
+      } else {
+        cat("=== TEST DU CHI-DEUX ===\n")
+        cat(crosstab_values$chi_test, "\n\n")
+      }
+    }
+    
+    if (!is.null(crosstab_values$fisher_test)) {
+      if (is.list(crosstab_values$fisher_test)) {
+        cat("=== TEST EXACT DE FISHER ===\n")
+        cat("p-value :", format.pval(crosstab_values$fisher_test$p.value), "\n")
+        cat("Interprétation :", ifelse(crosstab_values$fisher_test$p.value < 0.05, 
+                                       "Association significative", 
+                                       "Pas d'association significative"), "\n\n")
+      } else {
+        cat("=== TEST EXACT DE FISHER ===\n")
+        cat(crosstab_values$fisher_test, "\n\n")
+      }
+    }
+  })
+  
+  output$crosstabResiduals <- renderDT({
+    req(crosstab_values$residuals)
+    datatable(round(as.data.frame.matrix(crosstab_values$residuals), 2), 
+              options = list(scrollX = TRUE, pageLength = -1),
+              caption = "Résidus standardisés") %>%
+      formatStyle(names(as.data.frame.matrix(crosstab_values$residuals)),
+                  backgroundColor = styleInterval(c(-2, 2), c("lightblue", "white", "lightcoral")))
+  })
+  
+  # Graphiques
+  output$crosstabPlot <- renderPlot({
+    req(crosstab_values$contingency_table, input$crosstabRowVar, input$crosstabColVar)
+    
+    # Préparer les données pour ggplot
+    df_plot <- as.data.frame(crosstab_values$contingency_table)
+    df_plot <- df_plot[df_plot$Var1 != "Sum" & df_plot$Var2 != "Sum", ]
+    names(df_plot) <- c("Row_Var", "Col_Var", "Freq")
+    
+    # Titre
+    title <- if (!is.null(input$crosstabTitle) && input$crosstabTitle != "") {
+      input$crosstabTitle
+    } else {
+      paste("Tableau croisé :", input$crosstabRowVar, "vs", input$crosstabColVar)
+    }
+    
+    # Labels
+    x_label <- if (!is.null(input$crosstabXLabel) && input$crosstabXLabel != "") {
+      input$crosstabXLabel  
+    } else {
+      input$crosstabRowVar
+    }
+    
+    y_label <- if (!is.null(input$crosstabYLabel) && input$crosstabYLabel != "") {
+      input$crosstabYLabel
+    } else {
+      "Effectifs"
+    }
+    
+    if (input$plotType == "bar") {
+      p <- ggplot(df_plot, aes(x = Row_Var, y = Freq, fill = Col_Var)) +
+        geom_bar(stat = "identity", position = "dodge", alpha = 0.8) +
+        labs(title = title, x = x_label, y = y_label, fill = input$crosstabColVar) +
+        theme_minimal() +
+        theme(
+          plot.title = element_text(size = input$titleSize, hjust = 0.5),
+          axis.text = element_text(size = input$axisTextSize),
+          legend.text = element_text(size = input$legendTextSize),
+          axis.text.x = element_text(angle = 45, hjust = 1)
+        )
+      
+      if (input$showPercentages) {
+        p <- p + geom_text(aes(label = Freq), position = position_dodge(0.9), vjust = -0.5)
+      }
+      
+    } else if (input$plotType == "stacked_bar") {
+      p <- ggplot(df_plot, aes(x = Row_Var, y = Freq, fill = Col_Var)) +
+        geom_bar(stat = "identity", position = "stack", alpha = 0.8) +
+        labs(title = title, x = x_label, y = y_label, fill = input$crosstabColVar) +
+        theme_minimal() +
+        theme(
+          plot.title = element_text(size = input$titleSize, hjust = 0.5),
+          axis.text = element_text(size = input$axisTextSize),
+          legend.text = element_text(size = input$legendTextSize),
+          axis.text.x = element_text(angle = 45, hjust = 1)
+        )
+      
+      if (input$showPercentages) {
+        p <- p + geom_text(aes(label = Freq), position = position_stack(vjust = 0.5))
+      }
+      
+    } else if (input$plotType == "mosaic") {
+      # Graphique mosaïque simplifié
+      p <- ggplot(df_plot, aes(x = Row_Var, y = Freq, fill = Col_Var)) +
+        geom_bar(stat = "identity", position = "fill", alpha = 0.8) +
+        labs(title = title, x = x_label, y = "Proportions", fill = input$crosstabColVar) +
+        theme_minimal() +
+        theme(
+          plot.title = element_text(size = input$titleSize, hjust = 0.5),
+          axis.text = element_text(size = input$axisTextSize),
+          legend.text = element_text(size = input$legendTextSize),
+          axis.text.x = element_text(angle = 45, hjust = 1)
+        )
+    }
+    
+    crosstab_values$current_plot <- p
+    print(p)
+  })
+  
+  output$crosstabPiePlot <- renderPlot({
+    req(crosstab_values$contingency_table, input$pieVariable)
+    
+    if (input$pieVariable == "row") {
+      # Sommes par ligne
+      pie_data <- rowSums(crosstab_values$contingency_table)
+      pie_data <- pie_data[names(pie_data) != "Sum"]
+      var_name <- input$crosstabRowVar
+    } else {
+      # Sommes par colonne  
+      pie_data <- colSums(crosstab_values$contingency_table)
+      pie_data <- pie_data[names(pie_data) != "Sum"]
+      var_name <- input$crosstabColVar
+    }
+    
+    df_pie <- data.frame(
+      Category = names(pie_data),
+      Count = as.numeric(pie_data)
+    )
+    df_pie$Percentage <- round(df_pie$Count / sum(df_pie$Count) * 100, 1)
+    
+    p <- ggplot(df_pie, aes(x = "", y = Count, fill = Category)) +
+      geom_bar(stat = "identity", width = 1, alpha = 0.8) +
+      coord_polar(theta = "y") +
+      labs(title = paste("Répartition de", var_name), fill = var_name) +
+      theme_void() +
+      theme(
+        plot.title = element_text(size = input$titleSize, hjust = 0.5),
+        legend.text = element_text(size = input$legendTextSize)
+      )
+    
+    if (input$showPercentages) {
+      p <- p + geom_text(aes(label = paste0(Percentage, "%")), 
+                         position = position_stack(vjust = 0.5))
+    }
+    
+    crosstab_values$current_pie_plot <- p
+    print(p)
+  })
+  
+  # Téléchargements
+  output$downloadCrosstab <- downloadHandler(
+    filename = function() paste0("tableau_croise_", Sys.Date(), ".xlsx"),
+    content = function(file) {
+      wb <- openxlsx::createWorkbook()
+      openxlsx::addWorksheet(wb, "Effectifs")
+      openxlsx::writeData(wb, "Effectifs", as.data.frame.matrix(crosstab_values$contingency_table), rowNames = TRUE)
+      openxlsx::saveWorkbook(wb, file, overwrite = TRUE)
+    }
+  )
+  
+  output$downloadRowProp <- downloadHandler(
+    filename = function() paste0("proportions_lignes_", Sys.Date(), ".xlsx"),
+    content = function(file) {
+      wb <- openxlsx::createWorkbook()
+      openxlsx::addWorksheet(wb, "Prop_Lignes")
+      openxlsx::writeData(wb, "Prop_Lignes", round(as.data.frame.matrix(crosstab_values$row_proportions), 2), rowNames = TRUE)
+      openxlsx::saveWorkbook(wb, file, overwrite = TRUE)
+    }
+  )
+  
+  output$downloadColProp <- downloadHandler(
+    filename = function() paste0("proportions_colonnes_", Sys.Date(), ".xlsx"),
+    content = function(file) {
+      wb <- openxlsx::createWorkbook()
+      openxlsx::addWorksheet(wb, "Prop_Colonnes")
+      openxlsx::writeData(wb, "Prop_Colonnes", round(as.data.frame.matrix(crosstab_values$col_proportions), 2), rowNames = TRUE)
+      openxlsx::saveWorkbook(wb, file, overwrite = TRUE)
+    }
+  )
+  
+  output$downloadTotalProp <- downloadHandler(
+    filename = function() paste0("proportions_totales_", Sys.Date(), ".xlsx"),
+    content = function(file) {
+      wb <- openxlsx::createWorkbook()
+      openxlsx::addWorksheet(wb, "Prop_Totales")
+      openxlsx::writeData(wb, "Prop_Totales", round(as.data.frame.matrix(crosstab_values$total_proportions), 2), rowNames = TRUE)
+      openxlsx::saveWorkbook(wb, file, overwrite = TRUE)
+    }
+  )
+  
+  output$downloadTests <- downloadHandler(
+    filename = function() paste0("tests_statistiques_", Sys.Date(), ".xlsx"),
+    content = function(file) {
+      wb <- openxlsx::createWorkbook()
+      openxlsx::addWorksheet(wb, "Tests")
+      
+      tests_df <- data.frame(
+        Test = character(),
+        Statistique = numeric(),
+        p_value = numeric(),
+        Interpretation = character(),
+        stringsAsFactors = FALSE
+      )
+      
+      if (!is.null(crosstab_values$chi_test) && is.list(crosstab_values$chi_test)) {
+        tests_df <- rbind(tests_df, data.frame(
+          Test = "Chi-deux",
+          Statistique = crosstab_values$chi_test$statistic,
+          p_value = crosstab_values$chi_test$p.value,
+          Interpretation = ifelse(crosstab_values$chi_test$p.value < 0.05, "Significatif", "Non significatif")
+        ))
+      }
+      
+      if (!is.null(crosstab_values$fisher_test) && is.list(crosstab_values$fisher_test)) {
+        tests_df <- rbind(tests_df, data.frame(
+          Test = "Fisher exact",
+          Statistique = NA,
+          p_value = crosstab_values$fisher_test$p.value,
+          Interpretation = ifelse(crosstab_values$fisher_test$p.value < 0.05, "Significatif", "Non significatif")
+        ))
+      }
+      
+      openxlsx::writeData(wb, "Tests", tests_df)
+      openxlsx::saveWorkbook(wb, file, overwrite = TRUE)
+    }
+  )
+  
+  output$downloadResiduals <- downloadHandler(
+    filename = function() paste0("residus_", Sys.Date(), ".xlsx"),
+    content = function(file) {
+      req(crosstab_values$residuals)
+      wb <- openxlsx::createWorkbook()
+      openxlsx::addWorksheet(wb, "Residus")
+      openxlsx::writeData(wb, "Residus", round(as.data.frame.matrix(crosstab_values$residuals), 2), rowNames = TRUE)
+      openxlsx::saveWorkbook(wb, file, overwrite = TRUE)
+    }
+  )
+  
+  output$downloadPlot <- downloadHandler(
+    filename = function() paste0("graphique_croise_", Sys.Date(), ".png"),
+    content = function(file) {
+      req(crosstab_values$current_plot)
+      ggsave(file, plot = crosstab_values$current_plot, 
+             width = input$plotWidth, height = input$plotHeight, dpi = 300)
+    }
+  )
+  
+  output$downloadPiePlot <- downloadHandler(
+    filename = function() paste0("graphique_secteurs_", Sys.Date(), ".png"),
+    content = function(file) {
+      req(crosstab_values$current_pie_plot)
+      ggsave(file, plot = crosstab_values$current_pie_plot, 
+             width = input$plotWidth, height = input$plotHeight, dpi = 300)
     }
   )
   # ---- Visualisation des données ----
