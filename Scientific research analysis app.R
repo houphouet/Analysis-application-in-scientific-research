@@ -5,6 +5,7 @@
 ################################################################################
 
 Sys.setlocale("LC_ALL", "French")
+options(encoding = "UTF-8")
 
 ################################################################################
 #
@@ -30,7 +31,7 @@ required_packages <- c(
   "rmarkdown", "knitr", "factoextra", "cluster", "GGally", "psych", "nortest",
   "lmtest", "multcomp", "emmeans", "performance", "see", "report", "FactoMineR",
   "stats", "purrr", "stringr", "ggdendro", "reshape2", "MASS", "PMCMRplus",
-  "multcompView", "ggrepel", "FSA", "rcompanion", "plotrix", "tibble","questionr"
+  "multcompView", "ggrepel", "FSA", "rcompanion", "plotrix", "tibble","questionr", "colourpicker"
 )
 
 install_and_load(required_packages)
@@ -844,7 +845,7 @@ ui <- dashboardPage(
                     h5("Export graphique"),
                     numericInput("plotWidth", "Largeur (pouces)", value = 8, min = 3, max = 20),
                     numericInput("plotHeight", "Hauteur (pouces)", value = 6, min = 3, max = 20),
-                    numericInput("plotDPI", "Résolution (DPI)", value = 300, min = 72, max = 2000),
+                    numericInput("plotDPI", "Résolution (DPI)", value = 300, min = 72, max = 20000),
                     downloadButton("downloadPlot", "Télécharger graphique (PNG)", class = "btn-success", 
                                    style = "width: 100%;")
                 ),
@@ -1081,55 +1082,449 @@ ui <- dashboardPage(
                 )
               )
       ),
-      # ---- Visualisation des données ----
+      # ---- Visualisation des données avancée ----
       tabItem(tabName = "visualization",
               fluidRow(
-                box(title = "Sélection des variables", status = "primary", width = 3, solidHeader = TRUE,
+                box(title = "Sélection des variables", status = "primary", width = 4, solidHeader = TRUE,
+                    # Variables de base
                     uiOutput("vizXVarSelect"),
                     uiOutput("vizYVarSelect"),
                     uiOutput("vizColorVarSelect"),
-                    uiOutput("vizFacetVarSelect"),
+                    
+                    # Type de visualisation étendu avec courbe saisonnière
                     selectInput("vizType", "Type de visualisation:",
-                                choices = c("Nuage de points" = "scatter", "Boxplot" = "box", "Violon" = "violin",
-                                            "Barres" = "bar", "Lignes" = "line", "Densité" = "density",
-                                            "Histogramme" = "histogram", "Heatmap" = "heatmap")),
-                    actionButton("generateViz", "Générer la visualisation", class = "btn-primary", icon = icon("chart-line"))
+                                choices = c("Nuage de points" = "scatter", 
+                                            "Courbe saisonnière" = "seasonal",
+                                            "Boxplot" = "box", 
+                                            "Violon" = "violin",
+                                            "Barres" = "bar", 
+                                            "Lignes" = "line", 
+                                            "Densité" = "density",
+                                            "Histogramme" = "histogram", 
+                                            "Heatmap" = "heatmap",
+                                            "Aires empilées" = "area"),
+                                selected = "scatter"),
+                    
+                    # Mode d'agrégation - maintenant disponible pour tous les types
+                    checkboxInput("useAggregation", "Mode d'agrégation", value = FALSE),
+                    
+                    conditionalPanel(
+                      condition = "input.useAggregation",
+                      selectInput("aggFunction", "Fonction d'agrégation:",
+                                  choices = c("Moyenne" = "mean", 
+                                              "Médiane" = "median", 
+                                              "Somme" = "sum", 
+                                              "Comptage" = "count",
+                                              "Minimum" = "min",
+                                              "Maximum" = "max",
+                                              "Écart-type" = "sd"),
+                                  selected = "mean"),
+                      
+                      uiOutput("groupVarsSelect"),
+                      
+                      checkboxInput("showAggInfo", "Afficher les informations d'agrégation", value = TRUE),
+                      
+                      # Aide contextuelle pour l'agrégation
+                      helpText("L'agrégation permet de résumer vos données en groupes. 
+                         Le comptage fonctionne avec tous types de variables, 
+                         les autres fonctions nécessitent des variables numériques.")
+                    ),
+                    
+                    # Options pour courbes saisonnières
+                    conditionalPanel(
+                      condition = "input.vizType == 'seasonal'",
+                      div(class = "well", style = "background-color: #f0f8ff; border-left: 4px solid #1f77b4;",
+                          h5("Options courbe saisonnière", style = "color: #1f77b4; margin-top: 0;"),
+                          
+                          div(style = "display: flex; gap: 10px;",
+                              checkboxInput("showPoints", "Points", value = TRUE),
+                              checkboxInput("showLines", "Lignes", value = TRUE)
+                          ),
+                          
+                          selectInput("smoothMethod", "Méthode de lissage:",
+                                      choices = c("Aucun" = "none",
+                                                  "LOESS (local)" = "loess",
+                                                  "Linéaire" = "lm",
+                                                  "GAM général" = "gam",
+                                                  "GAM saisonnier" = "seasonal"),
+                                      selected = "loess"),
+                          
+                          conditionalPanel(
+                            condition = "input.smoothMethod != 'none'",
+                            checkboxInput("showConfidenceInterval", "Intervalle de confiance", value = TRUE),
+                            
+                            conditionalPanel(
+                              condition = "input.smoothMethod == 'loess'",
+                              sliderInput("smoothSpan", "Degré de lissage:", 
+                                          min = 0.1, max = 2, value = 0.75, step = 0.05,
+                                          pre = "Span: ")
+                            )
+                          ),
+                          
+                          helpText(icon("info-circle"), 
+                                   "GAM saisonnier utilise des splines cycliques pour capturer les patterns saisonniers répétitifs.")
+                      )
+                    ),
+                    
+                    # Options spécifiques aux nuages de points
+                    conditionalPanel(
+                      condition = "input.vizType == 'scatter'",
+                      div(class = "well", style = "background-color: #f8fff8; border-left: 4px solid #28a745;",
+                          h5("Options nuage de points", style = "color: #28a745; margin-top: 0;"),
+                          checkboxInput("jitterPoints", "Décalage aléatoire (jitter)", value = FALSE),
+                          helpText("Le jitter aide à visualiser les points qui se chevauchent.")
+                      )
+                    ),
+                    
+                    # Facetting
+                    uiOutput("vizFacetVarSelect"),
+                    
+                    # Bouton de génération avec style amélioré
+                    div(style = "margin-top: 15px;",
+                        actionButton("generateViz", "Générer la visualisation", 
+                                     class = "btn-primary btn-lg", 
+                                     icon = icon("chart-line"), 
+                                     style = "width: 100%; height: 50px; font-size: 16px;")
+                    )
                 ),
-                box(title = "Visualisation", status = "primary", width = 9, solidHeader = TRUE,
-                    plotlyOutput("advancedPlot", height = "600px")
+                
+                box(title = "Visualisation", status = "primary", width = 8, solidHeader = TRUE,
+                    # Zone d'alertes pour les messages système
+                    div(id = "alertZone", style = "margin-bottom: 10px;"),
+                    
+                    # Informations d'agrégation
+                    conditionalPanel(
+                      condition = "input.useAggregation && input.showAggInfo",
+                      div(id = "aggInfo", 
+                          style = "margin-bottom: 15px; padding: 10px; 
+                             background-color: #f8f9fa; border-left: 4px solid #007bff; 
+                             border-radius: 4px;",
+                          h5("Informations d'agrégation", style = "margin-top: 0; color: #007bff;"),
+                          verbatimTextOutput("aggregationInfo")
+                      )
+                    ),
+                    
+                    # Informations spécifiques pour courbe saisonnière
+                    conditionalPanel(
+                      condition = "input.vizType == 'seasonal'",
+                      div(style = "margin-bottom: 15px; padding: 10px; 
+                             background-color: #f0f8ff; border-left: 4px solid #1f77b4; 
+                             border-radius: 4px;",
+                          div(style = "display: flex; align-items: center; gap: 10px;",
+                              icon("calendar-alt", style = "color: #1f77b4; font-size: 18px;"),
+                              h6("Analyse saisonnière activée", style = "margin: 0; color: #1f77b4;")
+                          ),
+                          p(style = "margin: 5px 0 0 0; font-size: 12px; color: #666;",
+                            "Optimisé pour détecter les patterns cycliques et les tendances saisonnières.")
+                      )
+                    ),
+                    
+                    # Zone de visualisation principale
+                    div(id = "plotContainer", 
+                        style = "position: relative;",
+                        
+                        # Indicateur de chargement
+                        conditionalPanel(
+                          condition = "$('html').hasClass('shiny-busy')",
+                          div(style = "position: absolute; top: 50%; left: 50%; 
+                                 transform: translate(-50%, -50%); z-index: 1000;
+                                 background: rgba(255,255,255,0.9); padding: 20px; 
+                                 border-radius: 10px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);",
+                              icon("spinner", class = "fa-spin", style = "font-size: 24px; color: #007bff;"),
+                              h4("Génération en cours...", style = "margin-top: 10px; color: #007bff;")
+                          )
+                        ),
+                        
+                        plotlyOutput("advancedPlot", height = "650px")
+                    ),
+                    
+                    # Boutons d'action en bas avec style amélioré
+                    div(style = "margin-top: 15px; text-align: center; padding: 10px; 
+                           background-color: #f8f9fa; border-radius: 5px;",
+                        div(style = "display: inline-block; margin: 0 5px;",
+                            downloadButton("downloadInteractivePlot", "PNG Standard", 
+                                           class = "btn-success", icon = icon("download"),
+                                           style = "min-width: 120px;")),
+                        div(style = "display: inline-block; margin: 0 5px;",
+                            downloadButton("downloadInteractivePlotSVG", "SVG Vectoriel", 
+                                           class = "btn-info", icon = icon("vector-square"),
+                                           style = "min-width: 120px;")),
+                        div(style = "display: inline-block; margin: 0 5px;",
+                            actionButton("resetZoom", "Réinitialiser zoom", 
+                                         class = "btn-warning", icon = icon("search-minus"),
+                                         style = "min-width: 120px;"))
+                    )
                 )
               ),
+              
               fluidRow(
-                box(title = "Options de personnalisation", status = "info", width = 12, solidHeader = TRUE,
-                    fluidRow(
-                      column(3,
-                             textInput("plotTitle", "Titre du graphique:", value = ""),
-                             textInput("plotXLab", "Label axe X:", value = ""),
-                             textInput("plotYLab", "Label axe Y:", value = "")
-                      ),
-                      column(3,
-                             sliderInput("plotAlpha", "Transparence:", min = 0.1, max = 1, value = 0.7),
-                             sliderInput("plotSize", "Taille des points:", min = 1, max = 10, value = 3)
-                      ),
-                      column(3,
-                             selectInput("plotTheme", "Thème:",
-                                         choices = c("Classique" = "classic", "Minimal" = "minimal", "Gris" = "gray",
-                                                     "Sombre" = "dark", "Ligne" = "linedraw")),
-                             selectInput("plotPalette", "Palette de couleurs:",
-                                         choices = c("Défaut" = "default", "Set1" = "Set1", "Set2" = "Set2",
-                                                     "Set3" = "Set3", "Pastel1" = "Pastel1", "Pastel2" = "Pastel2",
-                                                     "Paired" = "Paired", "Dark2" = "Dark2", "Accent" = "Accent"))
-                      ),
-                      column(3,
-                             numericInput("plotWidthInteractive", "Largeur (px):", value = 800),
-                             numericInput("plotHeightInteractive", "Hauteur (px):", value = 500),
-                             downloadButton("downloadInteractivePlot", "Télécharger", class = "btn-success")
-                      )
+                box(title = "Personnalisation avancée", status = "info", width = 12, 
+                    solidHeader = TRUE, collapsible = TRUE, collapsed = TRUE,
+                    
+                    tabsetPanel(id = "customizationTabs",
+                                
+                                # Onglet Apparence
+                                tabPanel("Apparence", icon = icon("palette"),
+                                         br(),
+                                         fluidRow(
+                                           column(3,
+                                                  div(class = "well",
+                                                      h5("Titres et labels", style = "color: #337ab7; font-weight: bold; margin-top: 0;"),
+                                                      textInput("plotTitle", "Titre du graphique:", value = "", 
+                                                                placeholder = "Titre principal"),
+                                                      textInput("plotSubtitle", "Sous-titre:", value = "", 
+                                                                placeholder = "Sous-titre optionnel"),
+                                                      textInput("plotXLab", "Label axe X:", value = "", 
+                                                                placeholder = "Auto si vide"),
+                                                      textInput("plotYLab", "Label axe Y:", value = "", 
+                                                                placeholder = "Auto si vide"),
+                                                      textInput("plotCaption", "Caption:", value = "", 
+                                                                placeholder = "Source, notes...")
+                                                  )
+                                           ),
+                                           column(3,
+                                                  div(class = "well",
+                                                      h5("Style des éléments", style = "color: #337ab7; font-weight: bold; margin-top: 0;"),
+                                                      sliderInput("plotAlpha", "Transparence:", 
+                                                                  min = 0.1, max = 1, value = 0.7, step = 0.05),
+                                                      sliderInput("plotSize", "Taille des points:", 
+                                                                  min = 0.5, max = 8, value = 2, step = 0.5),
+                                                      sliderInput("lineWidth", "Épaisseur des lignes:", 
+                                                                  min = 0.5, max = 5, value = 1, step = 0.25),
+                                                      helpText("Ajustez la transparence pour éviter la surcharge visuelle.")
+                                                  )
+                                           ),
+                                           column(3,
+                                                  div(class = "well",
+                                                      h5("Thème et couleurs", style = "color: #337ab7; font-weight: bold; margin-top: 0;"),
+                                                      selectInput("plotTheme", "Thème:",
+                                                                  choices = c("Classique" = "classic", 
+                                                                              "Minimal" = "minimal", 
+                                                                              "Gris" = "gray",
+                                                                              "Sombre" = "dark", 
+                                                                              "Ligne" = "linedraw",
+                                                                              "Vide" = "void",
+                                                                              "Économique" = "economist"),
+                                                                  selected = "minimal"),
+                                                      selectInput("plotPalette", "Palette de couleurs:",
+                                                                  choices = c("Défaut" = "default", 
+                                                                              "Set1" = "Set1", "Set2" = "Set2", "Set3" = "Set3",
+                                                                              "Pastel1" = "Pastel1", "Pastel2" = "Pastel2",
+                                                                              "Paired" = "Paired", "Dark2" = "Dark2", "Accent" = "Accent",
+                                                                              "Viridis" = "viridis", "Plasma" = "plasma", "Inferno" = "inferno"),
+                                                                  selected = "default"),
+                                                      checkboxInput("customColors", "Couleurs personnalisées", value = FALSE),
+                                                      conditionalPanel(
+                                                        condition = "input.customColors",
+                                                        div(style = "display: flex; gap: 10px;",
+                                                            colourInput("color1", "Couleur 1:", value = "#3498db", 
+                                                                        showColour = "background", width = "100px"),
+                                                            colourInput("color2", "Couleur 2:", value = "#e74c3c", 
+                                                                        showColour = "background", width = "100px")
+                                                        )
+                                                      )
+                                                  )
+                                           ),
+                                           column(3,
+                                                  div(class = "well",
+                                                      h5("Dimensions et axes", style = "color: #337ab7; font-weight: bold; margin-top: 0;"),
+                                                      numericInput("plotWidthInteractive", "Largeur (px):", 
+                                                                   value = 1000, min = 300, max = 3000, step = 50),
+                                                      numericInput("plotHeightInteractive", "Hauteur (px):", 
+                                                                   value = 650, min = 300, max = 2000, step = 50),
+                                                      
+                                                      h6("Transformations des axes:", style = "font-weight: bold; margin-top: 15px;"),
+                                                      div(style = "display: grid; grid-template-columns: 1fr 1fr; gap: 5px;",
+                                                          checkboxInput("fixedAspectRatio", "Ratio fixe", value = FALSE),
+                                                          checkboxInput("logScaleX", "Log X", value = FALSE),
+                                                          checkboxInput("logScaleY", "Log Y", value = FALSE),
+                                                          checkboxInput("reverseY", "Inverser Y", value = FALSE)
+                                                      )
+                                                  )
+                                           )
+                                         )
+                                ),
+                                
+                                # Onglet Export
+                                tabPanel("Export", icon = icon("file-export"),
+                                         br(),
+                                         fluidRow(
+                                           column(4,
+                                                  div(class = "well",
+                                                      h5("Export Bitmap (PNG/JPEG/TIFF)", style = "color: #337ab7; font-weight: bold; margin-top: 0;"),
+                                                      numericInput("exportWidth", "Largeur (px):", 
+                                                                   value = 1920, min = 300, max = 8000, step = 100),
+                                                      numericInput("exportHeight", "Hauteur (px):", 
+                                                                   value = 1080, min = 300, max = 8000, step = 100),
+                                                      numericInput("exportDPI", "Résolution (DPI):", 
+                                                                   value = 300, min = 72, max = 1200, step = 50),
+                                                      selectInput("exportFormat", "Format bitmap:",
+                                                                  choices = c("PNG (recommandé)" = "png", 
+                                                                              "JPEG" = "jpeg", 
+                                                                              "TIFF" = "tiff"),
+                                                                  selected = "png"),
+                                                      conditionalPanel(
+                                                        condition = "input.exportFormat == 'jpeg'",
+                                                        sliderInput("jpegQuality", "Qualité JPEG:", 
+                                                                    min = 10, max = 100, value = 95, post = "%")
+                                                      ),
+                                                      helpText("PNG: meilleur pour graphiques avec texte. 
+                                               JPEG: plus petit mais avec compression.")
+                                                  )
+                                           ),
+                                           column(4,
+                                                  div(class = "well",
+                                                      h5("Export Vectoriel (SVG/PDF/EPS)", style = "color: #337ab7; font-weight: bold; margin-top: 0;"),
+                                                      numericInput("exportWidthCm", "Largeur (cm):", 
+                                                                   value = 20, min = 5, max = 50, step = 1),
+                                                      numericInput("exportHeightCm", "Hauteur (cm):", 
+                                                                   value = 15, min = 5, max = 50, step = 1),
+                                                      selectInput("vectorFormat", "Format vectoriel:",
+                                                                  choices = c("SVG (web)" = "svg", 
+                                                                              "PDF (print)" = "pdf", 
+                                                                              "EPS (publication)" = "eps"),
+                                                                  selected = "svg"),
+                                                      checkboxInput("embedFonts", "Incorporer les polices", value = TRUE),
+                                                      helpText("Les formats vectoriels sont redimensionnables sans perte de qualité. 
+                                               Idéal pour publications académiques."),
+                                                      
+                                                      # Presets de dimensions
+                                                      h6("Presets rapides:", style = "font-weight: bold; margin-top: 15px;"),
+                                                      div(style = "display: flex; gap: 5px; flex-wrap: wrap;",
+                                                          actionButton("presetA4", "A4", class = "btn-xs btn-outline-secondary", 
+                                                                       style = "font-size: 11px;"),
+                                                          actionButton("presetLetter", "Letter", class = "btn-xs btn-outline-secondary",
+                                                                       style = "font-size: 11px;"),
+                                                          actionButton("presetSquare", "Carré", class = "btn-xs btn-outline-secondary",
+                                                                       style = "font-size: 11px;")
+                                                      )
+                                                  )
+                                           ),
+                                           column(4,
+                                                  div(class = "well",
+                                                      h5("Aperçu et Export", style = "color: #337ab7; font-weight: bold; margin-top: 0;"),
+                                                      
+                                                      div(style = "background-color: #f8f9fa; padding: 10px; 
+                                                   border-radius: 5px; margin-bottom: 15px;",
+                                                          h6("Informations d'export:", style = "font-weight: bold; margin-bottom: 10px;"),
+                                                          verbatimTextOutput("exportPreview", placeholder = TRUE)
+                                                      ),
+                                                      
+                                                      actionButton("previewExport", "Aperçu des dimensions", 
+                                                                   class = "btn-info btn-block", icon = icon("eye"),
+                                                                   style = "margin-bottom: 10px;"),
+                                                      
+                                                      downloadButton("downloadCustomExport", "Export Personnalisé", 
+                                                                     class = "btn-success btn-block btn-lg", 
+                                                                     icon = icon("download"),
+                                                                     style = "height: 50px; font-size: 16px;")
+                                                  )
+                                           )
+                                         )
+                                ),
+                                
+                                # Onglet Statistiques
+                                tabPanel("Statistiques", icon = icon("calculator"),
+                                         br(),
+                                         fluidRow(
+                                           column(6,
+                                                  div(class = "well",
+                                                      h5("Résumé des données", style = "color: #337ab7; font-weight: bold; margin-top: 0;"),
+                                                      verbatimTextOutput("dataStatsSummary"),
+                                                      
+                                                      conditionalPanel(
+                                                        condition = "input.useAggregation",
+                                                        hr(),
+                                                        h6("Impact de l'agrégation:", style = "font-weight: bold;"),
+                                                        p("Les statistiques ci-dessus reflètent les données après agrégation."),
+                                                        helpText("L'agrégation peut considérablement réduire le nombre d'observations 
+                                                 tout en préservant l'information essentielle.")
+                                                      )
+                                                  )
+                                           ),
+                                           column(6,
+                                                  div(class = "well",
+                                                      h5("Configuration du graphique", style = "color: #337ab7; font-weight: bold; margin-top: 0;"),
+                                                      verbatimTextOutput("plotStatsSummary"),
+                                                      
+                                                      conditionalPanel(
+                                                        condition = "input.vizType == 'seasonal'",
+                                                        hr(),
+                                                        h6("Analyse saisonnière:", style = "font-weight: bold;"),
+                                                        div(
+                                                          p("• Détection automatique des patterns cycliques"),
+                                                          p("• Lissage adapté aux tendances saisonnières"),
+                                                          p("• Idéal pour données temporelles avec cycles"),
+                                                          p("• Support des intervalles de confiance")
+                                                        )
+                                                      )
+                                                  )
+                                           )
+                                         )
+                                ),
+                                
+                                # Onglet Aide amélioré
+                                tabPanel("Aide", icon = icon("question-circle"),
+                                         br(),
+                                         fluidRow(
+                                           column(12,
+                                                  div(class = "well",
+                                                      h4("Guide d'utilisation de la visualisation avancée", 
+                                                         style = "color: #337ab7; margin-top: 0;"),
+                                                      
+                                                      h5("1. Types de visualisations disponibles:"),
+                                                      tags$ul(
+                                                        tags$li(strong("Nuage de points:"), " Relations entre deux variables numériques"),
+                                                        tags$li(strong("Courbe saisonnière:", style = "color: #1f77b4;"), 
+                                                                " Spécialement optimisée pour les tendances cycliques et saisonnières"),
+                                                        tags$li(strong("Boxplot/Violon:"), " Distribution et quartiles"),
+                                                        tags$li(strong("Barres:"), " Comparaisons entre catégories"),
+                                                        tags$li(strong("Densité/Histogramme:"), " Distribution d'une variable"),
+                                                        tags$li(strong("Heatmap:"), " Relations entre variables catégorielles")
+                                                      ),
+                                                      
+                                                      div(class = "alert alert-info",
+                                                          h5(icon("calendar-alt"), " Courbe saisonnière - Nouveauté!", style = "color: #1f77b4;"),
+                                                          p("La courbe saisonnière utilise des techniques avancées pour détecter et visualiser les patterns répétitifs :"),
+                                                          tags$ul(
+                                                            tags$li("GAM saisonnier avec splines cycliques"),
+                                                            tags$li("Détection automatique de la périodicité"),
+                                                            tags$li("Lissage adaptatif pour tendances saisonnières"),
+                                                            tags$li("Intervalles de confiance pour quantifier l'incertitude")
+                                                          )
+                                                      ),
+                                                      
+                                                      h5("2. Mode d'agrégation:"),
+                                                      p("L'agrégation permet de résumer vos données par groupes:"),
+                                                      tags$ul(
+                                                        tags$li(strong("Comptage:"), " Nombre d'observations par groupe"),
+                                                        tags$li(strong("Moyenne/Médiane:"), " Tendance centrale par groupe"),
+                                                        tags$li(strong("Somme:"), " Total par groupe"),
+                                                        tags$li(strong("Min/Max:"), " Valeurs extrêmes par groupe")
+                                                      ),
+                                                      
+                                                      h5("3. Options d'export:"),
+                                                      tags$ul(
+                                                        tags$li(strong("PNG:"), " Format bitmap, idéal pour présentations"),
+                                                        tags$li(strong("SVG:"), " Format vectoriel, parfait pour le web"),
+                                                        tags$li(strong("PDF:"), " Format vectoriel, idéal pour l'impression"),
+                                                        tags$li(strong("Haute résolution:"), " Utilisez 300 DPI minimum pour l'impression")
+                                                      ),
+                                                      
+                                                      div(class = "alert alert-success",
+                                                          icon("lightbulb"),
+                                                          strong(" Conseil pour l'analyse saisonnière:"), 
+                                                          " Utilisez des variables temporelles (dates, mois, trimestres) sur l'axe X 
+                                           et activez le mode d'agrégation pour résumer vos données par période."
+                                                      )
+                                                  )
+                                           )
+                                         )
+                                )
                     )
                 )
               )
       ),
-      
       # ---- Rapport ----
       tabItem(tabName = "report",
               fluidRow(
@@ -2140,7 +2535,6 @@ server <- function(input, output, session) {
   
   
   # ---- Analyses multivariées ----
-  
   # Sélection du groupe pour les moyennes (ACP)
   output$pcaMeansGroupSelect <- renderUI({
     req(values$filteredData)
@@ -5441,145 +5835,642 @@ server <- function(input, output, session) {
              width = input$plotWidth, height = input$plotHeight, dpi = 300)
     }
   )
-  # ---- Visualisation des données ----
+  # ---- Visualisation des données avancée ----
+  
+  # Interface utilisateur dynamique pour la sélection des variables
   output$vizXVarSelect <- renderUI({
     req(values$filteredData)
     all_cols <- names(values$filteredData)
-    selectInput("vizXVar", "Variable X:", choices = all_cols)
+    all_cols <- iconv(all_cols, to = "UTF-8", sub = "")
+    selectInput("vizXVar", "Variable X:", 
+                choices = all_cols,
+                selected = if(length(all_cols) > 0) all_cols[1] else NULL)
   })
   
   output$vizYVarSelect <- renderUI({
     req(values$filteredData)
     all_cols <- names(values$filteredData)
-    selectInput("vizYVar", "Variable Y:", choices = all_cols)
+    all_cols <- iconv(all_cols, to = "UTF-8", sub = "")
+    selectInput("vizYVar", "Variable Y:", 
+                choices = all_cols,
+                selected = if(length(all_cols) > 1) all_cols[2] else NULL)
   })
   
   output$vizColorVarSelect <- renderUI({
     req(values$filteredData)
     all_cols <- names(values$filteredData)
-    selectInput("vizColorVar", "Variable de couleur (optionnel):", choices = c("Aucun", all_cols))
+    all_cols <- iconv(all_cols, to = "UTF-8", sub = "")
+    selectInput("vizColorVar", "Variable de couleur (optionnel):", 
+                choices = c("Aucun", all_cols),
+                selected = "Aucun")
   })
   
   output$vizFacetVarSelect <- renderUI({
     req(values$filteredData)
-    fac_cols <- names(values$filteredData)[sapply(values$filteredData, is.factor)]
-    selectInput("vizFacetVar", "Variable de facetting (optionnel):", choices = c("Aucun", fac_cols))
+    fac_cols <- names(values$filteredData)[sapply(values$filteredData, function(x) is.factor(x) || is.character(x))]
+    fac_cols <- iconv(fac_cols, to = "UTF-8", sub = "")
+    selectInput("vizFacetVar", "Variable de facetting (optionnel):", 
+                choices = c("Aucun", fac_cols),
+                selected = "Aucun")
   })
   
-  observeEvent(input$generateViz, {
-    req(values$filteredData, input$vizXVar, input$vizYVar)
+  # Sélection des variables de groupement pour l'agrégation
+  output$groupVarsSelect <- renderUI({
+    req(values$filteredData, input$useAggregation)
+    all_cols <- names(values$filteredData)
+    all_cols <- iconv(all_cols, to = "UTF-8", sub = "")
+    selectizeInput("groupVars", "Variables de groupement:", 
+                   choices = all_cols,
+                   multiple = TRUE,
+                   options = list(placeholder = 'Sélectionnez une ou plusieurs variables...'))
+  })
+  
+  # Fonction d'agrégation des données corrigée
+  aggregateData <- function(data, group_vars, agg_function, value_var) {
+    if (is.null(group_vars) || length(group_vars) == 0) {
+      return(data)
+    }
     
-    x_var <- input$vizXVar
-    y_var <- input$vizYVar
-    color_var <- if (input$vizColorVar != "Aucun") input$vizColorVar else NULL
-    facet_var <- if (input$vizFacetVar != "Aucun") input$vizFacetVar else NULL
-    
-    p <- ggplot(values$filteredData, aes_string(x = x_var, y = y_var)) +
-      theme(axis.line = element_line(color = "black"), axis.ticks = element_line(color = "black"))
-    
-    if (input$vizType == "scatter") {
-      if (!is.null(color_var)) {
-        p <- p + geom_point(aes_string(color = color_var), alpha = input$plotAlpha, size = input$plotSize)
+    tryCatch({
+      if (agg_function == "count") {
+        result <- data %>%
+          group_by(across(all_of(group_vars))) %>%
+          summarise(!!value_var := n(), .groups = "drop")
       } else {
-        p <- p + geom_point(alpha = input$plotAlpha, size = input$plotSize)
+        # Correction : ajout d'une valeur par défaut explicite
+        agg_func <- switch(as.character(agg_function),
+                           "mean" = function(x, na.rm = TRUE) mean(x, na.rm = na.rm),
+                           "median" = function(x, na.rm = TRUE) median(x, na.rm = na.rm),
+                           "sum" = function(x, na.rm = TRUE) sum(x, na.rm = na.rm),
+                           "min" = function(x, na.rm = TRUE) min(x, na.rm = na.rm),
+                           "max" = function(x, na.rm = TRUE) max(x, na.rm = na.rm),
+                           "sd" = function(x, na.rm = TRUE) sd(x, na.rm = na.rm),
+                           # Valeur par défaut pour éviter l'erreur
+                           function(x, na.rm = TRUE) mean(x, na.rm = na.rm))
+        
+        # Vérifier que la variable existe et est numérique pour les fonctions numériques
+        if (!(value_var %in% names(data))) {
+          warning(paste("Variable", value_var, "non trouvée dans les données"))
+          return(data)
+        }
+        
+        if (!is.numeric(data[[value_var]]) && agg_function != "count") {
+          # Si la variable n'est pas numérique, faire un comptage à la place
+          result <- data %>%
+            group_by(across(all_of(group_vars))) %>%
+            summarise(!!value_var := n(), .groups = "drop")
+        } else {
+          result <- data %>%
+            group_by(across(all_of(group_vars))) %>%
+            summarise(!!value_var := agg_func(!!sym(value_var), na.rm = TRUE), .groups = "drop")
+        }
       }
-    } else if (input$vizType == "box") {
-      if (!is.null(color_var)) {
-        p <- p + geom_boxplot(aes_string(fill = color_var), alpha = input$plotAlpha)
-      } else {
-        p <- p + geom_boxplot(alpha = input$plotAlpha)
-      }
-    } else if (input$vizType == "violin") {
-      if (!is.null(color_var)) {
-        p <- p + geom_violin(aes_string(fill = color_var), alpha = input$plotAlpha)
-      } else {
-        p <- p + geom_violin(alpha = input$plotAlpha)
-      }
-    } else if (input$vizType == "bar") {
-      if (!is.null(color_var)) {
-        p <- p + geom_bar(aes_string(fill = color_var), stat = "identity", alpha = input$plotAlpha)
-      } else {
-        p <- p + geom_bar(stat = "identity", alpha = input$plotAlpha)
-      }
-    } else if (input$vizType == "line") {
-      if (!is.null(color_var)) {
-        p <- p + geom_line(aes_string(color = color_var), alpha = input$plotAlpha, size = input$plotSize)
-      } else {
-        p <- p + geom_line(alpha = input$plotAlpha, size = input$plotSize)
-      }
-    } else if (input$vizType == "density") {
-      if (!is.null(color_var)) {
-        p <- p + geom_density(aes_string(fill = color_var), alpha = input$plotAlpha)
-      } else {
-        p <- p + geom_density(alpha = input$plotAlpha)
-      }
-    } else if (input$vizType == "histogram") {
-      if (!is.null(color_var)) {
-        p <- p + geom_histogram(aes_string(fill = color_var), alpha = input$plotAlpha, bins = 30)
-      } else {
-        p <- p + geom_histogram(alpha = input$plotAlpha, bins = 30)
-      }
-    } else if (input$vizType == "heatmap") {
-      heatmap_data <- values$filteredData %>%
-        group_by(across(c(x_var, y_var))) %>%
-        summarise(Count = n(), .groups = "drop")
       
-      p <- ggplot(heatmap_data, aes_string(x = x_var, y = y_var, fill = "Count")) +
-        geom_tile() +
-        scale_fill_gradient(low = "white", high = "red")
+      return(result)
+    }, error = function(e) {
+      warning(paste("Erreur dans l'agrégation:", e$message))
+      return(data)
+    })
+  }
+  
+  # Informations d'agrégation corrigées
+  output$aggregationInfo <- renderText({
+    req(input$useAggregation)
+    
+    if (is.null(input$groupVars) || length(input$groupVars) == 0) {
+      return("Aucune variable de groupement sélectionnée.")
     }
     
-    if (!is.null(facet_var)) {
-      p <- p + facet_wrap(as.formula(paste("~", facet_var)))
+    if (is.null(input$aggFunction) || is.null(input$vizYVar)) {
+      return("Configuration d'agrégation incomplète.")
     }
     
-    if (input$plotTheme == "classic") {
-      p <- p + theme_classic()
-    } else if (input$plotTheme == "minimal") {
-      p <- p + theme_minimal()
-    } else if (input$plotTheme == "gray") {
-      p <- p + theme_gray()
-    } else if (input$plotTheme == "dark") {
-      p <- p + theme_dark()
-    } else if (input$plotTheme == "linedraw") {
-      p <- p + theme_linedraw()
-    }
+    # Correction : gestion sécurisée du switch avec as.character
+    agg_text <- switch(as.character(input$aggFunction),
+                       "mean" = "Moyenne",
+                       "median" = "Médiane", 
+                       "sum" = "Somme",
+                       "count" = "Comptage",
+                       "min" = "Minimum",
+                       "max" = "Maximum",
+                       "sd" = "Écart-type",
+                       "Fonction inconnue")  # Valeur par défaut
     
-    if (input$plotTitle != "") {
-      p <- p + labs(title = input$plotTitle)
-    }
-    if (input$plotXLab != "") {
-      p <- p + labs(x = input$plotXLab)
-    }
-    if (input$plotYLab != "") {
-      p <- p + labs(y = input$plotYLab)
-    }
-    
-    if (!is.null(color_var) && input$plotPalette != "default") {
-      p <- p + scale_fill_brewer(palette = input$plotPalette) +
-        scale_color_brewer(palette = input$plotPalette)
-    }
-    
-    values$currentInteractivePlot <- p
+    paste0("Agrégation: ", agg_text, " de '", input$vizYVar, "'\n",
+           "Groupement par: ", paste(input$groupVars, collapse = ", "), "\n",
+           "Nombre de groupes: ", 
+           ifelse(exists("values") && !is.null(values$aggregatedData), 
+                  nrow(values$aggregatedData), "En cours de calcul..."))
   })
   
+  # Génération de la visualisation corrigée
+  observeEvent(input$generateViz, {
+    req(values$filteredData, input$vizXVar, input$vizYVar, input$vizType)
+    
+    tryCatch({
+      # Vérification des variables
+      if (!(input$vizXVar %in% names(values$filteredData))) {
+        showNotification("Variable X non trouvée dans les données", type = "error")
+        return()
+      }
+      if (!(input$vizYVar %in% names(values$filteredData))) {
+        showNotification("Variable Y non trouvée dans les données", type = "error")
+        return()
+      }
+      
+      # Préparation des données
+      plot_data <- values$filteredData
+      
+      # Agrégation si activée - avec vérifications supplémentaires
+      if (!is.null(input$useAggregation) && input$useAggregation && 
+          !is.null(input$groupVars) && length(input$groupVars) > 0) {
+        
+        # Vérifier que les variables de groupement existent
+        missing_vars <- setdiff(input$groupVars, names(plot_data))
+        if (length(missing_vars) > 0) {
+          showNotification(paste("Variables de groupement manquantes:", paste(missing_vars, collapse = ", ")), 
+                           type = "warning")
+          return()
+        }
+        
+        # Vérifier que la fonction d'agrégation est valide
+        valid_functions <- c("mean", "median", "sum", "min", "max", "sd", "count")
+        if (!(input$aggFunction %in% valid_functions)) {
+          showNotification("Fonction d'agrégation non valide", type = "error")
+          return()
+        }
+        
+        # Pour le comptage, on peut utiliser n'importe quelle variable comme référence
+        agg_var <- input$vizYVar
+        
+        plot_data <- aggregateData(plot_data, input$groupVars, input$aggFunction, agg_var)
+        values$aggregatedData <- plot_data
+        
+        # Vérifier que l'agrégation a fonctionné
+        if (nrow(plot_data) == 0) {
+          showNotification("L'agrégation n'a produit aucun résultat", type = "warning")
+          return()
+        }
+      }
+      
+      # Vérifier que les variables existent toujours après agrégation
+      if (!(input$vizXVar %in% names(plot_data))) {
+        showNotification("Variable X non disponible après agrégation", type = "error")
+        return()
+      }
+      if (!(input$vizYVar %in% names(plot_data))) {
+        showNotification("Variable Y non disponible après agrégation", type = "error")
+        return()
+      }
+      
+      x_var <- input$vizXVar
+      y_var <- input$vizYVar
+      color_var <- if (!is.null(input$vizColorVar) && input$vizColorVar != "Aucun") input$vizColorVar else NULL
+      facet_var <- if (!is.null(input$vizFacetVar) && input$vizFacetVar != "Aucun") input$vizFacetVar else NULL
+      
+      # Vérifier que les variables de couleur et facette existent
+      if (!is.null(color_var) && !(color_var %in% names(plot_data))) {
+        showNotification("Variable de couleur non disponible après agrégation", type = "warning")
+        color_var <- NULL
+      }
+      if (!is.null(facet_var) && !(facet_var %in% names(plot_data))) {
+        showNotification("Variable de facette non disponible après agrégation", type = "warning")
+        facet_var <- NULL
+      }
+      
+      # Construction du graphique base
+      base_aes <- if (!is.null(color_var)) {
+        aes(x = !!sym(x_var), y = !!sym(y_var), color = !!sym(color_var))
+      } else {
+        aes(x = !!sym(x_var), y = !!sym(y_var))
+      }
+      
+      p <- ggplot(plot_data, base_aes)
+      
+      # Application du type de visualisation avec correction switch
+      viz_type <- as.character(input$vizType)
+      
+      if (viz_type == "scatter") {
+        jitter_points <- if (!is.null(input$jitterPoints)) input$jitterPoints else FALSE
+        plot_alpha <- if (!is.null(input$plotAlpha)) input$plotAlpha else 0.7
+        plot_size <- if (!is.null(input$plotSize)) input$plotSize else 2
+        
+        if (jitter_points) {
+          p <- p + geom_jitter(alpha = plot_alpha, size = plot_size, width = 0.2)
+        } else {
+          p <- p + geom_point(alpha = plot_alpha, size = plot_size)
+        }
+        
+      } else if (viz_type == "seasonal") {
+        # Nouvelle courbe d'évolution saisonnière
+        show_points <- if (!is.null(input$showPoints)) input$showPoints else TRUE
+        show_lines <- if (!is.null(input$showLines)) input$showLines else TRUE
+        plot_alpha <- if (!is.null(input$plotAlpha)) input$plotAlpha else 0.7
+        plot_size <- if (!is.null(input$plotSize)) input$plotSize else 2
+        line_width <- if (!is.null(input$lineWidth)) input$lineWidth else 1
+        
+        if (show_points) {
+          p <- p + geom_point(alpha = plot_alpha, size = plot_size)
+        }
+        if (show_lines) {
+          if (!is.null(color_var)) {
+            p <- p + geom_line(aes(group = !!sym(color_var)), 
+                               alpha = plot_alpha, linewidth = line_width)
+          } else {
+            p <- p + geom_line(alpha = plot_alpha, linewidth = line_width)
+          }
+        }
+        
+        # Lissage saisonnier optionnel
+        smooth_method <- if (!is.null(input$smoothMethod)) as.character(input$smoothMethod) else "none"
+        if (smooth_method != "none") {
+          show_confidence <- if (!is.null(input$showConfidenceInterval)) input$showConfidenceInterval else TRUE
+          
+          smooth_args <- list(se = show_confidence, alpha = 0.3)
+          
+          # Gestion sécurisée des méthodes de lissage
+          if (smooth_method == "loess") {
+            smooth_span <- if (!is.null(input$smoothSpan)) input$smoothSpan else 0.75
+            smooth_args$method <- "loess"
+            smooth_args$span <- smooth_span
+          } else if (smooth_method == "lm") {
+            smooth_args$method <- "lm"
+          } else if (smooth_method == "gam") {
+            smooth_args$method <- "gam"
+            smooth_args$formula <- y ~ s(x, bs = "cs")  # Spline cyclique pour saisonnalité
+          } else if (smooth_method == "seasonal") {
+            # Méthode spéciale pour saisonnalité
+            smooth_args$method <- "gam"
+            smooth_args$formula <- y ~ s(x, bs = "cc")  # Spline cyclique contrainte
+          }
+          
+          p <- p + do.call(geom_smooth, smooth_args)
+        }
+        
+      } else if (viz_type == "area") {
+        plot_alpha <- if (!is.null(input$plotAlpha)) input$plotAlpha else 0.7
+        if (!is.null(color_var)) {
+          p <- p + geom_area(aes(fill = !!sym(color_var)), alpha = plot_alpha, position = "stack")
+        } else {
+          p <- p + geom_area(alpha = plot_alpha)
+        }
+        
+      } else if (viz_type == "box") {
+        plot_alpha <- if (!is.null(input$plotAlpha)) input$plotAlpha else 0.7
+        if (!is.null(color_var)) {
+          p <- p + geom_boxplot(aes(fill = !!sym(color_var)), alpha = plot_alpha)
+        } else {
+          p <- p + geom_boxplot(alpha = plot_alpha)
+        }
+        
+      } else if (viz_type == "violin") {
+        plot_alpha <- if (!is.null(input$plotAlpha)) input$plotAlpha else 0.7
+        if (!is.null(color_var)) {
+          p <- p + geom_violin(aes(fill = !!sym(color_var)), alpha = plot_alpha)
+        } else {
+          p <- p + geom_violin(alpha = plot_alpha)
+        }
+        
+      } else if (viz_type == "bar") {
+        plot_alpha <- if (!is.null(input$plotAlpha)) input$plotAlpha else 0.7
+        if (!is.null(color_var)) {
+          p <- p + geom_bar(aes(fill = !!sym(color_var)), stat = "identity", alpha = plot_alpha)
+        } else {
+          p <- p + geom_bar(stat = "identity", alpha = plot_alpha)
+        }
+        
+      } else if (viz_type == "line") {
+        plot_alpha <- if (!is.null(input$plotAlpha)) input$plotAlpha else 0.7
+        line_width <- if (!is.null(input$lineWidth)) input$lineWidth else 1
+        if (!is.null(color_var)) {
+          p <- p + geom_line(aes(group = !!sym(color_var)), alpha = plot_alpha, linewidth = line_width)
+        } else {
+          p <- p + geom_line(alpha = plot_alpha, linewidth = line_width)
+        }
+        
+      } else if (viz_type == "density") {
+        plot_alpha <- if (!is.null(input$plotAlpha)) input$plotAlpha else 0.7
+        if (!is.null(color_var)) {
+          p <- p + geom_density(aes(fill = !!sym(color_var)), alpha = plot_alpha)
+        } else {
+          p <- p + geom_density(alpha = plot_alpha)
+        }
+        
+      } else if (viz_type == "histogram") {
+        plot_alpha <- if (!is.null(input$plotAlpha)) input$plotAlpha else 0.7
+        if (!is.null(color_var)) {
+          p <- p + geom_histogram(aes(fill = !!sym(color_var)), alpha = plot_alpha, bins = 30)
+        } else {
+          p <- p + geom_histogram(alpha = plot_alpha, bins = 30)
+        }
+        
+      } else if (viz_type == "heatmap") {
+        if (!is.null(input$useAggregation) && input$useAggregation && 
+            !is.null(input$groupVars)) {
+          # Utiliser les données agrégées pour le heatmap
+          heatmap_data <- plot_data
+        } else {
+          heatmap_data <- plot_data %>%
+            group_by(across(c(!!sym(x_var), !!sym(y_var)))) %>%
+            summarise(Count = n(), .groups = "drop")
+          y_var <- "Count"
+        }
+        
+        p <- ggplot(heatmap_data, aes(x = !!sym(x_var), y = !!sym(y_var), fill = !!sym(y_var))) +
+          geom_tile() +
+          scale_fill_gradient(low = "white", high = "red")
+      }
+      
+      # Facetting
+      if (!is.null(facet_var)) {
+        p <- p + facet_wrap(vars(!!sym(facet_var)), scales = "free")
+      }
+      
+      # Application du thème avec correction switch
+      plot_theme <- if (!is.null(input$plotTheme)) as.character(input$plotTheme) else "minimal"
+      theme_func <- switch(plot_theme,
+                           "classic" = theme_classic(),
+                           "minimal" = theme_minimal(),
+                           "gray" = theme_gray(),
+                           "dark" = theme_dark(),
+                           "linedraw" = theme_linedraw(),
+                           "void" = theme_void(),
+                           "economist" = theme_minimal(),
+                           theme_minimal())  # Valeur par défaut
+      
+      p <- p + theme_func
+      
+      # Personnalisations des axes
+      if (!is.null(input$logScaleX) && input$logScaleX) p <- p + scale_x_log10()
+      if (!is.null(input$logScaleY) && input$logScaleY) p <- p + scale_y_log10()
+      if (!is.null(input$reverseY) && input$reverseY) p <- p + scale_y_reverse()
+      
+      # Ratio d'aspect fixe
+      if (!is.null(input$fixedAspectRatio) && input$fixedAspectRatio) {
+        p <- p + coord_fixed()
+      }
+      
+      # Labels et titres
+      labels_list <- list()
+      if (!is.null(input$plotTitle) && nchar(input$plotTitle) > 0) labels_list$title <- input$plotTitle
+      if (!is.null(input$plotSubtitle) && nchar(input$plotSubtitle) > 0) labels_list$subtitle <- input$plotSubtitle
+      if (!is.null(input$plotXLab) && nchar(input$plotXLab) > 0) labels_list$x <- input$plotXLab
+      if (!is.null(input$plotYLab) && nchar(input$plotYLab) > 0) labels_list$y <- input$plotYLab
+      if (!is.null(input$plotCaption) && nchar(input$plotCaption) > 0) labels_list$caption <- input$plotCaption
+      
+      if (length(labels_list) > 0) {
+        p <- p + do.call(labs, labels_list)
+      }
+      
+      # Palette de couleurs
+      plot_palette <- if (!is.null(input$plotPalette)) as.character(input$plotPalette) else "default"
+      if (!is.null(color_var) && plot_palette != "default") {
+        if (plot_palette %in% c("viridis", "plasma", "inferno")) {
+          p <- p + scale_fill_viridis_d(option = plot_palette) +
+            scale_color_viridis_d(option = plot_palette)
+        } else {
+          p <- p + scale_fill_brewer(palette = plot_palette) +
+            scale_color_brewer(palette = plot_palette)
+        }
+      }
+      
+      # Couleurs personnalisées
+      if (!is.null(input$customColors) && input$customColors && !is.null(color_var)) {
+        color1 <- if (!is.null(input$color1)) input$color1 else "#3498db"
+        color2 <- if (!is.null(input$color2)) input$color2 else "#e74c3c"
+        colors <- c(color1, color2)
+        p <- p + scale_fill_manual(values = colors) +
+          scale_color_manual(values = colors)
+      }
+      
+      # Améliorations du thème
+      p <- p + theme(
+        axis.line = element_line(color = "black"),
+        axis.ticks = element_line(color = "black"),
+        plot.title = element_text(size = 16, face = "bold"),
+        plot.subtitle = element_text(size = 12),
+        legend.position = "bottom",
+        panel.grid.minor = element_blank()
+      )
+      
+      values$currentInteractivePlot <- p
+      values$plotData <- plot_data
+      
+      showNotification("Visualisation générée avec succès!", type = "success")
+      
+    }, error = function(e) {
+      showNotification(paste("Erreur lors de la génération du graphique:", e$message), type = "error")
+      print(paste("Erreur détaillée:", e$message))
+    })
+  })
+  
+  # Rendu du graphique interactif
   output$advancedPlot <- renderPlotly({
     req(values$currentInteractivePlot)
-    ggplotly(values$currentInteractivePlot, width = input$plotWidthInteractive, height = input$plotHeightInteractive)
+    tryCatch({
+      width_val <- if (!is.null(input$plotWidthInteractive)) input$plotWidthInteractive else 1000
+      height_val <- if (!is.null(input$plotHeightInteractive)) input$plotHeightInteractive else 650
+      
+      p_interactive <- ggplotly(values$currentInteractivePlot, 
+                                width = width_val, 
+                                height = height_val) %>%
+        layout(
+          dragmode = "zoom",
+          showlegend = TRUE
+        ) %>%
+        config(
+          displayModeBar = TRUE,
+          modeBarButtonsToRemove = c("lasso2d", "select2d"),
+          displaylogo = FALSE
+        )
+      
+      return(p_interactive)
+    }, error = function(e) {
+      showNotification(paste("Erreur lors de la création du graphique interactif:", e$message), type = "error")
+      return(NULL)
+    })
   })
   
+  # Réinitialiser le zoom
+  observeEvent(input$resetZoom, {
+    runjs("
+    var plot = document.getElementById('advancedPlot');
+    if (plot && plot.layout) {
+      Plotly.relayout(plot, {
+        'xaxis.autorange': true,
+        'yaxis.autorange': true
+      });
+    }
+  ")
+  })
+  
+  # Prévisualisation des dimensions d'export
+  output$exportPreview <- renderText({
+    width_cm <- if (!is.null(input$exportWidthCm)) input$exportWidthCm else 20
+    height_cm <- if (!is.null(input$exportHeightCm)) input$exportHeightCm else 15
+    width_px <- if (!is.null(input$exportWidth)) input$exportWidth else 1920
+    height_px <- if (!is.null(input$exportHeight)) input$exportHeight else 1080
+    dpi <- if (!is.null(input$exportDPI)) input$exportDPI else 300
+    
+    paste0("Dimensions vectorielles: ", width_cm, " × ", height_cm, " cm\n",
+           "Dimensions pixel: ", width_px, " × ", height_px, " px\n",
+           "Résolution: ", dpi, " DPI\n",
+           "Taille estimée: ", round(width_px * height_px * 3 / 1024^2, 1), " MB")
+  })
+  
+  # Statistiques des données
+  output$dataStatsSummary <- renderText({
+    req(values$plotData)
+    data <- values$plotData
+    
+    paste0("Nombre d'observations: ", nrow(data), "\n",
+           "Nombre de variables: ", ncol(data), "\n",
+           "Variables numériques: ", sum(sapply(data, is.numeric)), "\n",
+           "Variables catégorielles: ", sum(sapply(data, function(x) is.factor(x) || is.character(x))))
+  })
+  
+  # Statistiques du graphique
+  output$plotStatsSummary <- renderText({
+    req(values$currentInteractivePlot, input$vizXVar, input$vizYVar)
+    
+    viz_type_name <- switch(as.character(input$vizType),
+                            "scatter" = "Nuage de points",
+                            "seasonal" = "Courbe saisonnière",
+                            "box" = "Boxplot",
+                            "violin" = "Violon",
+                            "bar" = "Barres",
+                            "line" = "Lignes",
+                            "density" = "Densité",
+                            "histogram" = "Histogramme",
+                            "heatmap" = "Heatmap",
+                            "area" = "Aires empilées",
+                            "Inconnu")
+    
+    plot_info <- paste0("Type: ", viz_type_name, "\n",
+                        "Variable X: ", input$vizXVar, "\n",
+                        "Variable Y: ", input$vizYVar)
+    
+    if (!is.null(input$vizColorVar) && input$vizColorVar != "Aucun") {
+      plot_info <- paste0(plot_info, "\nVariable couleur: ", input$vizColorVar)
+    }
+    
+    if (!is.null(input$useAggregation) && input$useAggregation) {
+      agg_name <- switch(as.character(input$aggFunction),
+                         "mean" = "Moyenne",
+                         "median" = "Médiane",
+                         "sum" = "Somme",
+                         "count" = "Comptage",
+                         "min" = "Minimum",
+                         "max" = "Maximum",
+                         "sd" = "Écart-type",
+                         "Inconnue")
+      plot_info <- paste0(plot_info, "\nAgrégation: ", agg_name)
+    }
+    
+    return(plot_info)
+  })
+  
+  # Téléchargement PNG standard
   output$downloadInteractivePlot <- downloadHandler(
     filename = function() {
       paste0("visualisation_", Sys.Date(), ".png")
     },
     content = function(file) {
       req(values$currentInteractivePlot)
-      ggsave(file, plot = values$currentInteractivePlot,
-             width = input$plotWidthInteractive/100, height = input$plotHeightInteractive/100,
-             dpi = 2000, units = "in", device = "png")
+      tryCatch({
+        width_val <- if (!is.null(input$plotWidthInteractive)) input$plotWidthInteractive else 1000
+        height_val <- if (!is.null(input$plotHeightInteractive)) input$plotHeightInteractive else 650
+        
+        ggsave(file, plot = values$currentInteractivePlot,
+               width = width_val/100, 
+               height = height_val/100,
+               dpi = 200, units = "in", device = "png")
+      }, error = function(e) {
+        showNotification(paste("Erreur lors de la sauvegarde:", e$message), type = "error")
+      })
     }
   )
   
+  # Téléchargement SVG
+  output$downloadInteractivePlotSVG <- downloadHandler(
+    filename = function() {
+      paste0("visualisation_", Sys.Date(), ".svg")
+    },
+    content = function(file) {
+      req(values$currentInteractivePlot)
+      tryCatch({
+        width_cm <- if (!is.null(input$exportWidthCm)) input$exportWidthCm else 20
+        height_cm <- if (!is.null(input$exportHeightCm)) input$exportHeightCm else 15
+        ggsave(file, plot = values$currentInteractivePlot,
+               width = width_cm, height = height_cm,
+               units = "cm", device = "svg")
+      }, error = function(e) {
+        showNotification(paste("Erreur lors de la sauvegarde SVG:", e$message), type = "error")
+      })
+    }
+  )
+  
+  # Export personnalisé
+  output$downloadCustomExport <- downloadHandler(
+    filename = function() {
+      vector_format <- if (!is.null(input$vectorFormat)) as.character(input$vectorFormat) else "svg"
+      export_format <- if (!is.null(input$exportFormat)) as.character(input$exportFormat) else "png"
+      format <- if (vector_format %in% c("svg", "pdf", "eps")) vector_format else export_format
+      paste0("visualisation_custom_", Sys.Date(), ".", format)
+    },
+    content = function(file) {
+      req(values$currentInteractivePlot)
+      tryCatch({
+        vector_format <- if (!is.null(input$vectorFormat)) as.character(input$vectorFormat) else "svg"
+        export_format <- if (!is.null(input$exportFormat)) as.character(input$exportFormat) else "png"
+        
+        # Choix entre export vectoriel et bitmap
+        if (vector_format %in% c("svg", "pdf", "eps")) {
+          # Export vectoriel
+          device_func <- switch(vector_format,
+                                "svg" = "svg",
+                                "pdf" = "pdf", 
+                                "eps" = "ps",
+                                "svg")  # Valeur par défaut
+          
+          width_cm <- if (!is.null(input$exportWidthCm)) input$exportWidthCm else 20
+          height_cm <- if (!is.null(input$exportHeightCm)) input$exportHeightCm else 15
+          
+          ggsave(file, plot = values$currentInteractivePlot,
+                 width = width_cm, height = height_cm,
+                 units = "cm", device = device_func)
+          
+        } else {
+          # Export bitmap haute résolution
+          device_func <- export_format
+          
+          width_px <- if (!is.null(input$exportWidth)) input$exportWidth else 1920
+          height_px <- if (!is.null(input$exportHeight)) input$exportHeight else 1080
+          dpi <- if (!is.null(input$exportDPI)) input$exportDPI else 300
+          
+          # Paramètres spéciaux pour JPEG
+          if (export_format == "jpeg") {
+            jpeg_quality <- if (!is.null(input$jpegQuality)) input$jpegQuality else 95
+            ggsave(file, plot = values$currentInteractivePlot,
+                   width = width_px/dpi, 
+                   height = height_px/dpi,
+                   dpi = dpi, units = "in", device = device_func,
+                   quality = jpeg_quality)
+          } else {
+            ggsave(file, plot = values$currentInteractivePlot,
+                   width = width_px/dpi, 
+                   height = height_px/dpi,
+                   dpi = dpi, units = "in", device = device_func)
+          }
+        }
+        
+        showNotification("Export réussi!", type = "success")
+        
+      }, error = function(e) {
+        showNotification(paste("Erreur lors de l'export personnalisé:", e$message), type = "error")
+      })
+    }
+  )
   # ---- Rapport ----
   observeEvent(input$generateReport, {
     showNotification("Génération du rapport en cours...", type = "message")
