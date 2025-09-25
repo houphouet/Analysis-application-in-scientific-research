@@ -31,7 +31,8 @@ required_packages <- c(
   "rmarkdown", "knitr", "factoextra", "cluster", "GGally", "psych", "nortest",
   "lmtest", "multcomp", "emmeans", "performance", "see", "report", "FactoMineR",
   "stats", "purrr", "stringr", "ggdendro", "reshape2", "MASS", "PMCMRplus",
-  "multcompView", "ggrepel", "FSA", "rcompanion", "plotrix", "tibble","questionr", "colourpicker"
+  "multcompView", "ggrepel", "FSA", "rcompanion", "plotrix", "tibble",
+  "questionr", "colourpicker", "scales"
 )
 
 install_and_load(required_packages)
@@ -1082,7 +1083,7 @@ ui <- dashboardPage(
                 )
               )
       ),
-      # ---- Visualisation des données avancée ----
+      # ---- Visualisation des données  ----
       tabItem(tabName = "visualization",
               fluidRow(
                 box(title = "Sélection des variables", status = "primary", width = 4, solidHeader = TRUE,
@@ -1126,27 +1127,57 @@ ui <- dashboardPage(
                       
                       # Aide contextuelle pour l'agrégation
                       helpText("L'agrégation permet de résumer vos données en groupes. 
-                         Le comptage fonctionne avec tous types de variables, 
-                         les autres fonctions nécessitent des variables numériques.")
+                   Le comptage fonctionne avec tous types de variables, 
+                   les autres fonctions nécessitent des variables numériques.")
                     ),
                     
-                    # Options pour courbes saisonnières
+                    # Options pour courbes saisonnières améliorées
                     conditionalPanel(
                       condition = "input.vizType == 'seasonal'",
                       div(class = "well", style = "background-color: #f0f8ff; border-left: 4px solid #1f77b4;",
                           h5("Options courbe saisonnière", style = "color: #1f77b4; margin-top: 0;"),
+                          
+                          # Type de courbe saisonnière
+                          selectInput("seasonalType", "Type de courbe saisonnière:",
+                                      choices = c("Tendance simple" = "trend",
+                                                  "Décomposition saisonnière" = "decomposition",
+                                                  "Moyennes mobiles" = "moving_average",
+                                                  "Cycle annuel" = "annual_cycle",
+                                                  "Analyse de variance saisonnière" = "seasonal_variance"),
+                                      selected = "trend"),
                           
                           div(style = "display: flex; gap: 10px;",
                               checkboxInput("showPoints", "Points", value = TRUE),
                               checkboxInput("showLines", "Lignes", value = TRUE)
                           ),
                           
+                          # Période saisonnière
+                          conditionalPanel(
+                            condition = "input.seasonalType != 'trend'",
+                            numericInput("seasonalPeriod", "Période saisonnière:", 
+                                         value = 12, min = 2, max = 365, step = 1),
+                            helpText("Nombre d'observations par cycle (ex: 12 pour données mensuelles)")
+                          ),
+                          
+                          # NOUVEAU : Options de formatage des dates selon le modèle
+                          h6("Format des dates et affichage:", style = "font-weight: bold; margin-top: 15px;"),
+                          selectInput("dateFormat", "Format des dates sur l'axe X:",
+                                      choices = c("Jour-Mois (%d-%b)" = "%d-%b",
+                                                  "Mois-Année (%b-%Y)" = "%b-%Y",
+                                                  "Date complète (%d/%m/%Y)" = "%d/%m/%Y",
+                                                  "Auto" = "auto"),
+                                      selected = "%d-%b"),
+                          
+                          checkboxInput("rotateDates", "Incliner les dates à 45°", value = TRUE),
+                          numericInput("baseFontSize", "Taille de police de base:", value = 14, min = 8, max = 24),
+                          
                           selectInput("smoothMethod", "Méthode de lissage:",
                                       choices = c("Aucun" = "none",
                                                   "LOESS (local)" = "loess",
                                                   "Linéaire" = "lm",
                                                   "GAM général" = "gam",
-                                                  "GAM saisonnier" = "seasonal"),
+                                                  "GAM saisonnier" = "seasonal_gam",
+                                                  "Spline cyclique" = "cyclic_spline"),
                                       selected = "loess"),
                           
                           conditionalPanel(
@@ -1161,8 +1192,19 @@ ui <- dashboardPage(
                             )
                           ),
                           
+                          # Options de décomposition
+                          conditionalPanel(
+                            condition = "input.seasonalType == 'decomposition'",
+                            selectInput("decompositionType", "Type de décomposition:",
+                                        choices = c("Additive" = "additive",
+                                                    "Multiplicative" = "multiplicative"),
+                                        selected = "additive"),
+                            checkboxInput("showTrend", "Afficher tendance", value = TRUE),
+                            checkboxInput("showSeasonal", "Afficher composante saisonnière", value = TRUE)
+                          ),
+                          
                           helpText(icon("info-circle"), 
-                                   "GAM saisonnier utilise des splines cycliques pour capturer les patterns saisonniers répétitifs.")
+                                   "Les courbes saisonnières permettent d'analyser les patterns cycliques dans vos données temporelles.")
                       )
                     ),
                     
@@ -1197,8 +1239,8 @@ ui <- dashboardPage(
                       condition = "input.useAggregation && input.showAggInfo",
                       div(id = "aggInfo", 
                           style = "margin-bottom: 15px; padding: 10px; 
-                             background-color: #f8f9fa; border-left: 4px solid #007bff; 
-                             border-radius: 4px;",
+                       background-color: #f8f9fa; border-left: 4px solid #007bff; 
+                       border-radius: 4px;",
                           h5("Informations d'agrégation", style = "margin-top: 0; color: #007bff;"),
                           verbatimTextOutput("aggregationInfo")
                       )
@@ -1208,14 +1250,15 @@ ui <- dashboardPage(
                     conditionalPanel(
                       condition = "input.vizType == 'seasonal'",
                       div(style = "margin-bottom: 15px; padding: 10px; 
-                             background-color: #f0f8ff; border-left: 4px solid #1f77b4; 
-                             border-radius: 4px;",
+                       background-color: #f0f8ff; border-left: 4px solid #1f77b4; 
+                       border-radius: 4px;",
                           div(style = "display: flex; align-items: center; gap: 10px;",
                               icon("calendar-alt", style = "color: #1f77b4; font-size: 18px;"),
                               h6("Analyse saisonnière activée", style = "margin: 0; color: #1f77b4;")
                           ),
                           p(style = "margin: 5px 0 0 0; font-size: 12px; color: #666;",
-                            "Optimisé pour détecter les patterns cycliques et les tendances saisonnières.")
+                            "Optimisé pour détecter les patterns cycliques et les tendances saisonnières."),
+                          verbatimTextOutput("seasonalInfo")
                       )
                     ),
                     
@@ -1227,9 +1270,9 @@ ui <- dashboardPage(
                         conditionalPanel(
                           condition = "$('html').hasClass('shiny-busy')",
                           div(style = "position: absolute; top: 50%; left: 50%; 
-                                 transform: translate(-50%, -50%); z-index: 1000;
-                                 background: rgba(255,255,255,0.9); padding: 20px; 
-                                 border-radius: 10px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);",
+                           transform: translate(-50%, -50%); z-index: 1000;
+                           background: rgba(255,255,255,0.9); padding: 20px; 
+                           border-radius: 10px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);",
                               icon("spinner", class = "fa-spin", style = "font-size: 24px; color: #007bff;"),
                               h4("Génération en cours...", style = "margin-top: 10px; color: #007bff;")
                           )
@@ -1238,9 +1281,19 @@ ui <- dashboardPage(
                         plotlyOutput("advancedPlot", height = "650px")
                     ),
                     
-                    # Boutons d'action en bas avec style amélioré
+                    # Boutons d'action en bas avec DPI configurable
                     div(style = "margin-top: 15px; text-align: center; padding: 10px; 
-                           background-color: #f8f9fa; border-radius: 5px;",
+                     background-color: #f8f9fa; border-radius: 5px;",
+                        
+                        # Configuration DPI
+                        div(style = "margin-bottom: 10px; display: inline-block;",
+                            numericInput("exportDPIConfig", "DPI pour export:", 
+                                         value = 300, min = 72, max = 20000, step = 50,
+                                         width = "150px")
+                        ),
+                        
+                        br(),
+                        
                         div(style = "display: inline-block; margin: 0 5px;",
                             downloadButton("downloadInteractivePlot", "PNG Standard", 
                                            class = "btn-success", icon = icon("download"),
@@ -5835,9 +5888,8 @@ server <- function(input, output, session) {
              width = input$plotWidth, height = input$plotHeight, dpi = 300)
     }
   )
-  # ---- Visualisation des données avancée ----
+  # ---- Visualisation des données avancée - Script Serveur Complet ----
   
-  # Interface utilisateur dynamique pour la sélection des variables
   output$vizXVarSelect <- renderUI({
     req(values$filteredData)
     all_cols <- names(values$filteredData)
@@ -5847,13 +5899,24 @@ server <- function(input, output, session) {
                 selected = if(length(all_cols) > 0) all_cols[1] else NULL)
   })
   
+  # MODIFICATION : Sélection multiple pour courbes saisonnières
   output$vizYVarSelect <- renderUI({
     req(values$filteredData)
     all_cols <- names(values$filteredData)
     all_cols <- iconv(all_cols, to = "UTF-8", sub = "")
-    selectInput("vizYVar", "Variable Y:", 
-                choices = all_cols,
-                selected = if(length(all_cols) > 1) all_cols[2] else NULL)
+    
+    # Permettre sélection multiple pour courbes saisonnières
+    if (!is.null(input$vizType) && input$vizType == "seasonal") {
+      selectizeInput("vizYVar", "Variable(s) Y:", 
+                     choices = all_cols,
+                     multiple = TRUE,
+                     selected = if(length(all_cols) > 1) all_cols[2] else NULL,
+                     options = list(placeholder = 'Sélectionnez une ou plusieurs variables...'))
+    } else {
+      selectInput("vizYVar", "Variable Y:", 
+                  choices = all_cols,
+                  selected = if(length(all_cols) > 1) all_cols[2] else NULL)
+    }
   })
   
   output$vizColorVarSelect <- renderUI({
@@ -5885,45 +5948,135 @@ server <- function(input, output, session) {
                    options = list(placeholder = 'Sélectionnez une ou plusieurs variables...'))
   })
   
-  # Fonction d'agrégation des données corrigée
-  aggregateData <- function(data, group_vars, agg_function, value_var) {
+  # NOUVELLE FONCTION : Analyse saisonnière adaptée au modèle avec boucles
+  analyzeSeasonalData <- function(data, x_var, y_vars, color_var = NULL, seasonal_type = "trend", period = 12) {
+    tryCatch({
+      # Validation des entrées
+      if (nrow(data) < period) {
+        warning("Pas assez de données pour l'analyse saisonnière")
+        return(data)
+      }
+      
+      # Tri des données par variable X si c'est une date
+      if (is.numeric(data[[x_var]]) || inherits(data[[x_var]], "Date")) {
+        data <- data[order(data[[x_var]]), ]
+      }
+      
+      # Traitement pour chaque variable Y (adaptation du modèle en boucle)
+      for (y_var in y_vars) {
+        if (!y_var %in% names(data) || !is.numeric(data[[y_var]])) next
+        
+        # Préparation selon le type d'analyse saisonnière
+        if (seasonal_type == "decomposition" && nrow(data) >= period * 2) {
+          # Création d'une série temporelle et décomposition
+          ts_data <- ts(data[[y_var]], frequency = period)
+          
+          # Choix du type de décomposition
+          decomp_type <- if (!is.null(input$decompositionType)) input$decompositionType else "additive"
+          if (!decomp_type %in% c("additive", "multiplicative")) {
+            decomp_type <- "additive"
+          }
+          
+          decomp <- decompose(ts_data, type = decomp_type)
+          
+          # Ajout des composantes aux données
+          data[[paste0(y_var, "_trend")]] <- as.numeric(decomp$trend)
+          data[[paste0(y_var, "_seasonal")]] <- as.numeric(decomp$seasonal)
+          data[[paste0(y_var, "_remainder")]] <- as.numeric(decomp$random)
+          
+        } else if (seasonal_type == "moving_average" && nrow(data) >= period) {
+          # Calcul de moyennes mobiles centrées
+          ma_values <- rep(NA, nrow(data))
+          half_period <- floor(period / 2)
+          
+          for (i in (half_period + 1):(nrow(data) - half_period)) {
+            start_idx <- i - half_period
+            end_idx <- i + half_period
+            ma_values[i] <- mean(data[[y_var]][start_idx:end_idx], na.rm = TRUE)
+          }
+          data[[paste0(y_var, "_moving_average")]] <- ma_values
+          
+        } else if (seasonal_type == "annual_cycle") {
+          # Analyse du cycle annuel avec moyennes par période
+          if (inherits(data[[x_var]], "Date") || inherits(data[[x_var]], "POSIXt")) {
+            data$cycle_period <- format(as.Date(data[[x_var]]), "%m")
+          } else if (is.numeric(data[[x_var]])) {
+            data$cycle_period <- (data[[x_var]] %% period) + 1
+          }
+          
+          # Calcul des moyennes par période
+          if ("cycle_period" %in% names(data)) {
+            cycle_means <- data %>%
+              group_by(cycle_period) %>%
+              summarise(!!paste0(y_var, "_cycle_mean") := mean(!!sym(y_var), na.rm = TRUE), .groups = "drop")
+            data <- left_join(data, cycle_means, by = "cycle_period")
+          }
+          
+        } else if (seasonal_type == "seasonal_variance") {
+          # Analyse de la variance saisonnière
+          if (inherits(data[[x_var]], "Date") || inherits(data[[x_var]], "POSIXt")) {
+            data$season_group <- format(as.Date(data[[x_var]]), "%m")
+          } else if (is.numeric(data[[x_var]])) {
+            data$season_group <- ceiling((data[[x_var]] %% period) / (period/4))
+          }
+          
+          if ("season_group" %in% names(data)) {
+            season_stats <- data %>%
+              group_by(season_group) %>%
+              summarise(
+                !!paste0(y_var, "_season_mean") := mean(!!sym(y_var), na.rm = TRUE),
+                !!paste0(y_var, "_season_var") := var(!!sym(y_var), na.rm = TRUE),
+                !!paste0(y_var, "_season_sd") := sd(!!sym(y_var), na.rm = TRUE),
+                .groups = "drop"
+              )
+            data <- left_join(data, season_stats, by = "season_group")
+          }
+        }
+      }
+      
+      return(data)
+    }, error = function(e) {
+      warning(paste("Erreur dans l'analyse saisonnière:", e$message))
+      return(data)
+    })
+  }
+  
+  # Fonction d'agrégation sécurisée
+  aggregateData <- function(data, group_vars, agg_function, value_vars) {
     if (is.null(group_vars) || length(group_vars) == 0) {
       return(data)
     }
     
     tryCatch({
+      # Validation des paramètres d'entrée
+      valid_functions <- c("mean", "median", "sum", "min", "max", "sd", "count")
+      if (!agg_function %in% valid_functions) {
+        stop("Fonction d'agrégation non valide")
+      }
+      
       if (agg_function == "count") {
         result <- data %>%
           group_by(across(all_of(group_vars))) %>%
-          summarise(!!value_var := n(), .groups = "drop")
+          summarise(across(all_of(value_vars), ~n()), .groups = "drop")
       } else {
-        # Correction : ajout d'une valeur par défaut explicite
-        agg_func <- switch(as.character(agg_function),
-                           "mean" = function(x, na.rm = TRUE) mean(x, na.rm = na.rm),
-                           "median" = function(x, na.rm = TRUE) median(x, na.rm = na.rm),
-                           "sum" = function(x, na.rm = TRUE) sum(x, na.rm = na.rm),
-                           "min" = function(x, na.rm = TRUE) min(x, na.rm = na.rm),
-                           "max" = function(x, na.rm = TRUE) max(x, na.rm = na.rm),
-                           "sd" = function(x, na.rm = TRUE) sd(x, na.rm = na.rm),
-                           # Valeur par défaut pour éviter l'erreur
-                           function(x, na.rm = TRUE) mean(x, na.rm = na.rm))
+        # Fonctions d'agrégation sécurisées
+        agg_functions <- list(
+          "mean" = function(x, na.rm = TRUE) mean(x, na.rm = na.rm),
+          "median" = function(x, na.rm = TRUE) median(x, na.rm = na.rm),
+          "sum" = function(x, na.rm = TRUE) sum(x, na.rm = na.rm),
+          "min" = function(x, na.rm = TRUE) min(x, na.rm = na.rm),
+          "max" = function(x, na.rm = TRUE) max(x, na.rm = na.rm),
+          "sd" = function(x, na.rm = TRUE) sd(x, na.rm = na.rm)
+        )
         
-        # Vérifier que la variable existe et est numérique pour les fonctions numériques
-        if (!(value_var %in% names(data))) {
-          warning(paste("Variable", value_var, "non trouvée dans les données"))
-          return(data)
+        agg_func <- agg_functions[[agg_function]]
+        if (is.null(agg_func)) {
+          agg_func <- agg_functions[["mean"]]  # Fonction par défaut
         }
         
-        if (!is.numeric(data[[value_var]]) && agg_function != "count") {
-          # Si la variable n'est pas numérique, faire un comptage à la place
-          result <- data %>%
-            group_by(across(all_of(group_vars))) %>%
-            summarise(!!value_var := n(), .groups = "drop")
-        } else {
-          result <- data %>%
-            group_by(across(all_of(group_vars))) %>%
-            summarise(!!value_var := agg_func(!!sym(value_var), na.rm = TRUE), .groups = "drop")
-        }
+        result <- data %>%
+          group_by(across(all_of(group_vars))) %>%
+          summarise(across(all_of(value_vars), agg_func, na.rm = TRUE), .groups = "drop")
       }
       
       return(result)
@@ -5933,7 +6086,480 @@ server <- function(input, output, session) {
     })
   }
   
-  # Informations d'agrégation corrigées
+  # GÉNÉRATION DE LA VISUALISATION PRINCIPALE
+  observeEvent(input$generateViz, {
+    req(values$filteredData, input$vizXVar, input$vizYVar, input$vizType)
+    
+    tryCatch({
+      # Validation des entrées principales
+      if (!(input$vizXVar %in% names(values$filteredData))) {
+        showNotification("Variable X non trouvée dans les données", type = "error")
+        return()
+      }
+      
+      # Gestion des variables Y multiples ou simples
+      y_vars <- if (is.null(input$vizYVar)) {
+        return()
+      } else if (length(input$vizYVar) > 1) {
+        input$vizYVar
+      } else {
+        c(input$vizYVar)
+      }
+      
+      # Validation de l'existence de toutes les variables Y
+      missing_y_vars <- setdiff(y_vars, names(values$filteredData))
+      if (length(missing_y_vars) > 0) {
+        showNotification(paste("Variables Y manquantes:", paste(missing_y_vars, collapse = ", ")), 
+                         type = "error")
+        return()
+      }
+      
+      # Préparation des données
+      plot_data <- values$filteredData
+      
+      # Agrégation si activée avec validation robuste
+      if (isTRUE(input$useAggregation) && !is.null(input$groupVars) && length(input$groupVars) > 0) {
+        # Validation des variables de groupement
+        missing_vars <- setdiff(input$groupVars, names(plot_data))
+        if (length(missing_vars) > 0) {
+          showNotification(paste("Variables de groupement manquantes:", paste(missing_vars, collapse = ", ")), 
+                           type = "warning")
+          return()
+        }
+        
+        plot_data <- aggregateData(plot_data, input$groupVars, input$aggFunction, y_vars)
+        values$aggregatedData <- plot_data
+        
+        if (nrow(plot_data) == 0) {
+          showNotification("L'agrégation n'a produit aucun résultat", type = "warning")
+          return()
+        }
+      }
+      
+      # Analyse saisonnière si nécessaire
+      if (input$vizType == "seasonal" && !is.null(input$seasonalType)) {
+        seasonal_period <- if (!is.null(input$seasonalPeriod) && is.numeric(input$seasonalPeriod)) {
+          max(2, min(365, input$seasonalPeriod))
+        } else {
+          12
+        }
+        plot_data <- analyzeSeasonalData(plot_data, input$vizXVar, y_vars, 
+                                         input$vizColorVar, input$seasonalType, seasonal_period)
+      }
+      
+      # Variables pour la construction du graphique
+      x_var <- input$vizXVar
+      color_var <- if (!is.null(input$vizColorVar) && input$vizColorVar != "Aucun" && 
+                       input$vizColorVar %in% names(plot_data)) input$vizColorVar else NULL
+      facet_var <- if (!is.null(input$vizFacetVar) && input$vizFacetVar != "Aucun" && 
+                       input$vizFacetVar %in% names(plot_data)) input$vizFacetVar else NULL
+      
+      # Paramètres de style avec validation
+      plot_alpha <- if (!is.null(input$plotAlpha) && is.numeric(input$plotAlpha)) {
+        max(0.1, min(1, input$plotAlpha))
+      } else {
+        0.7
+      }
+      
+      plot_size <- if (!is.null(input$plotSize) && is.numeric(input$plotSize)) {
+        max(0.5, min(8, input$plotSize))
+      } else {
+        2
+      }
+      
+      line_width <- if (!is.null(input$lineWidth) && is.numeric(input$lineWidth)) {
+        max(0.25, min(5, input$lineWidth))
+      } else {
+        1
+      }
+      
+      # NOUVELLE SECTION : Courbes saisonnières selon le modèle fourni
+      if (input$vizType == "seasonal") {
+        
+        # Obtenir les dates réelles si X est une date
+        dates_reelles <- if (inherits(plot_data[[x_var]], "Date")) {
+          sort(unique(plot_data[[x_var]]))
+        } else {
+          NULL
+        }
+        
+        # Options d'affichage
+        show_points <- isTRUE(input$showPoints)
+        show_lines <- isTRUE(input$showLines)
+        base_font_size <- if (!is.null(input$baseFontSize)) input$baseFontSize else 14
+        rotate_dates <- isTRUE(input$rotateDates)
+        
+        # BOUCLE SUR CHAQUE VARIABLE Y (adaptation du modèle)
+        plot_list <- list()
+        
+        for (i in seq_along(y_vars)) {
+          current_y_var <- y_vars[i]
+          
+          # Construction de l'esthétique pour chaque variable
+          if (!is.null(color_var)) {
+            current_aes <- aes(x = !!sym(x_var), y = !!sym(current_y_var), color = !!sym(color_var))
+          } else {
+            current_aes <- aes(x = !!sym(x_var), y = !!sym(current_y_var))
+          }
+          
+          # Création du graphique selon le modèle fourni
+          current_p <- ggplot(plot_data, current_aes)
+          
+          # Points et lignes selon le modèle
+          if (show_lines) {
+            if (!is.null(color_var)) {
+              current_p <- current_p + geom_line(aes(group = !!sym(color_var)), 
+                                                 size = line_width, alpha = plot_alpha)
+            } else {
+              current_p <- current_p + geom_line(size = line_width, alpha = plot_alpha)
+            }
+          }
+          
+          if (show_points) {
+            current_p <- current_p + geom_point(size = plot_size, alpha = plot_alpha)
+          }
+          
+          # Adaptation du modèle : échelles selon le modèle fourni
+          if (!is.null(dates_reelles)) {
+            # Format de date selon l'input utilisateur
+            date_format_choice <- if (!is.null(input$dateFormat) && input$dateFormat != "auto") {
+              input$dateFormat
+            } else {
+              "%d-%b"  # Format par défaut du modèle
+            }
+            
+            current_p <- current_p + 
+              scale_x_date(
+                breaks = dates_reelles,
+                labels = date_format(date_format_choice),
+                expand = expansion(mult = c(0.01, 0.1))
+              )
+          }
+          
+          current_p <- current_p +
+            scale_y_continuous(expand = expansion(mult = c(0.05, 0.1))) +
+            labs(
+              x = "Date of Observation",
+              y = paste("Average number of", current_y_var, "/30 plants"),
+              color = if (!is.null(color_var)) "Treatment" else NULL
+            ) +
+            theme_minimal(base_size = base_font_size) +
+            theme(
+              axis.text.x = element_text(
+                angle = if (rotate_dates) 45 else 0, 
+                hjust = if (rotate_dates) 1 else 0.5, 
+                color = "black"
+              ),
+              axis.text.y = element_text(color = "black"),
+              axis.title = element_text(face = "bold"),
+              axis.line = element_line(color = "black"),
+              axis.ticks = element_line(color = "black"),
+              panel.grid.minor = element_blank()
+            )
+          
+          # Lissage saisonnier avec validation des méthodes
+          smooth_method <- if (!is.null(input$smoothMethod)) as.character(input$smoothMethod) else "none"
+          if (smooth_method != "none") {
+            show_confidence <- isTRUE(input$showConfidenceInterval)
+            
+            tryCatch({
+              if (smooth_method == "loess") {
+                smooth_span <- if (!is.null(input$smoothSpan) && is.numeric(input$smoothSpan)) {
+                  max(0.1, min(2, input$smoothSpan))
+                } else {
+                  0.75
+                }
+                current_p <- current_p + geom_smooth(method = "loess", span = smooth_span, se = show_confidence, alpha = 0.3)
+              } else if (smooth_method == "lm") {
+                current_p <- current_p + geom_smooth(method = "lm", se = show_confidence, alpha = 0.3)
+              } else if (smooth_method == "gam") {
+                current_p <- current_p + geom_smooth(method = "gam", formula = y ~ s(x), se = show_confidence, alpha = 0.3)
+              } else if (smooth_method == "seasonal_gam") {
+                current_p <- current_p + geom_smooth(method = "gam", formula = y ~ s(x, bs = "cs"), se = show_confidence, alpha = 0.3)
+              } else if (smooth_method == "cyclic_spline") {
+                current_p <- current_p + geom_smooth(method = "gam", formula = y ~ s(x, bs = "cc"), se = show_confidence, alpha = 0.3)
+              }
+            }, error = function(e) {
+              warning(paste("Erreur dans le lissage:", e$message))
+            })
+          }
+          
+          # Gestion spécifique selon le type saisonnier avec composantes
+          seasonal_type <- if (!is.null(input$seasonalType)) as.character(input$seasonalType) else "trend"
+          
+          if (seasonal_type == "decomposition") {
+            # Graphique de décomposition avec composantes
+            trend_col <- paste0(current_y_var, "_trend")
+            seasonal_col <- paste0(current_y_var, "_seasonal")
+            
+            if (trend_col %in% names(plot_data) && isTRUE(input$showTrend)) {
+              current_p <- current_p + geom_line(aes(y = !!sym(trend_col)), color = "blue", alpha = 0.8, linewidth = line_width)
+            }
+            if (seasonal_col %in% names(plot_data) && isTRUE(input$showSeasonal)) {
+              current_p <- current_p + geom_line(aes(y = !!sym(seasonal_col)), color = "red", alpha = 0.6, linewidth = line_width * 0.8)
+            }
+            
+          } else if (seasonal_type == "moving_average") {
+            ma_col <- paste0(current_y_var, "_moving_average")
+            if (ma_col %in% names(plot_data)) {
+              current_p <- current_p + geom_line(aes(y = !!sym(ma_col)), color = "orange", alpha = 0.8, linewidth = line_width)
+            }
+            
+          } else if (seasonal_type == "annual_cycle") {
+            cycle_col <- paste0(current_y_var, "_cycle_mean")
+            if (cycle_col %in% names(plot_data)) {
+              current_p <- current_p + geom_line(aes(y = !!sym(cycle_col)), color = "green", alpha = 0.8, linewidth = line_width)
+            }
+            
+          } else if (seasonal_type == "seasonal_variance") {
+            mean_col <- paste0(current_y_var, "_season_mean")
+            sd_col <- paste0(current_y_var, "_season_sd")
+            
+            if (mean_col %in% names(plot_data)) {
+              current_p <- current_p + geom_line(aes(y = !!sym(mean_col)), color = "purple", alpha = 0.8, linewidth = line_width)
+            }
+            if (sd_col %in% names(plot_data)) {
+              current_p <- current_p + geom_ribbon(aes(ymin = !!sym(mean_col) - !!sym(sd_col), 
+                                                       ymax = !!sym(mean_col) + !!sym(sd_col)), 
+                                                   alpha = 0.3, fill = "purple")
+            }
+          }
+          
+          # Facetting si spécifié
+          if (!is.null(facet_var)) {
+            current_p <- current_p + facet_wrap(vars(!!sym(facet_var)), scales = "free")
+          }
+          
+          # Stocker le graphique dans la liste
+          plot_list[[i]] <- current_p
+        }
+        
+        # Si plusieurs variables Y, utiliser le premier graphique ou combiner
+        # Pour cette version, on utilise le premier graphique
+        p <- plot_list[[1]]
+        
+      } else {
+        # AUTRES TYPES DE VISUALISATION (code existant adapté)
+        # Pour les autres types, on utilise seulement la première variable Y
+        y_var <- y_vars[1]
+        
+        # Construction de l'esthétique de base
+        base_aes <- if (!is.null(color_var)) {
+          aes(x = !!sym(x_var), y = !!sym(y_var), color = !!sym(color_var))
+        } else {
+          aes(x = !!sym(x_var), y = !!sym(y_var))
+        }
+        
+        p <- ggplot(plot_data, base_aes)
+        
+        # Application du type de visualisation
+        viz_type <- as.character(input$vizType)
+        
+        if (viz_type == "scatter") {
+          jitter_points <- isTRUE(input$jitterPoints)
+          if (jitter_points) {
+            p <- p + geom_jitter(alpha = plot_alpha, size = plot_size, width = 0.2, height = 0)
+          } else {
+            p <- p + geom_point(alpha = plot_alpha, size = plot_size)
+          }
+          
+        } else if (viz_type == "area") {
+          if (!is.null(color_var)) {
+            p <- p + geom_area(aes(fill = !!sym(color_var)), alpha = plot_alpha, position = "stack")
+          } else {
+            p <- p + geom_area(alpha = plot_alpha, fill = "skyblue")
+          }
+          
+        } else if (viz_type == "box") {
+          if (!is.null(color_var)) {
+            p <- p + geom_boxplot(aes(fill = !!sym(color_var)), alpha = plot_alpha)
+          } else {
+            p <- p + geom_boxplot(alpha = plot_alpha, fill = "lightblue")
+          }
+          
+        } else if (viz_type == "violin") {
+          if (!is.null(color_var)) {
+            p <- p + geom_violin(aes(fill = !!sym(color_var)), alpha = plot_alpha)
+          } else {
+            p <- p + geom_violin(alpha = plot_alpha, fill = "lightgreen")
+          }
+          
+        } else if (viz_type == "bar") {
+          if (!is.null(color_var)) {
+            p <- p + geom_bar(aes(fill = !!sym(color_var)), stat = "identity", alpha = plot_alpha)
+          } else {
+            p <- p + geom_bar(stat = "identity", alpha = plot_alpha, fill = "steelblue")
+          }
+          
+        } else if (viz_type == "line") {
+          if (!is.null(color_var)) {
+            p <- p + geom_line(aes(group = !!sym(color_var)), alpha = plot_alpha, linewidth = line_width)
+          } else {
+            p <- p + geom_line(alpha = plot_alpha, linewidth = line_width, color = "darkblue")
+          }
+          
+        } else if (viz_type == "density") {
+          p <- ggplot(plot_data)
+          if (!is.null(color_var)) {
+            p <- p + geom_density(aes(x = !!sym(x_var), fill = !!sym(color_var)), alpha = plot_alpha)
+          } else {
+            p <- p + geom_density(aes(x = !!sym(x_var)), alpha = plot_alpha, fill = "skyblue")
+          }
+          
+        } else if (viz_type == "histogram") {
+          p <- ggplot(plot_data)
+          if (!is.null(color_var)) {
+            p <- p + geom_histogram(aes(x = !!sym(x_var), fill = !!sym(color_var)), 
+                                    alpha = plot_alpha, bins = 30, position = "identity")
+          } else {
+            p <- p + geom_histogram(aes(x = !!sym(x_var)), 
+                                    alpha = plot_alpha, bins = 30, fill = "skyblue")
+          }
+          
+        } else if (viz_type == "heatmap") {
+          # Heatmap avec agrégation automatique si nécessaire
+          if (isTRUE(input$useAggregation) && !is.null(input$groupVars)) {
+            heatmap_data <- plot_data
+            fill_var <- y_var
+          } else {
+            heatmap_data <- plot_data %>%
+              group_by(across(c(!!sym(x_var), !!sym(y_var)))) %>%
+              summarise(Count = n(), .groups = "drop")
+            fill_var <- "Count"
+          }
+          
+          p <- ggplot(heatmap_data, aes(x = !!sym(x_var), y = !!sym(y_var), fill = !!sym(fill_var))) +
+            geom_tile(alpha = plot_alpha) +
+            scale_fill_gradient(low = "white", high = "red")
+        }
+        
+        # Facetting si spécifié pour les autres types
+        if (!is.null(facet_var)) {
+          p <- p + facet_wrap(vars(!!sym(facet_var)), scales = "free")
+        }
+        
+        # Application du thème minimal
+        p <- p + theme_minimal()
+      }
+      
+      # Application du thème avec validation sécurisée
+      plot_theme <- if (!is.null(input$plotTheme)) as.character(input$plotTheme) else "minimal"
+      
+      theme_mapping <- list(
+        "classic" = theme_classic(),
+        "minimal" = theme_minimal(),
+        "gray" = theme_gray(),
+        "dark" = theme_dark(),
+        "linedraw" = theme_linedraw(),
+        "void" = theme_void(),
+        "economist" = theme_minimal()
+      )
+      
+      selected_theme <- theme_mapping[[plot_theme]]
+      p <- p + if (!is.null(selected_theme)) selected_theme else theme_minimal()
+      
+      # Personnalisations des axes avec validation
+      if (isTRUE(input$logScaleX)) {
+        tryCatch({
+          p <- p + scale_x_log10()
+        }, error = function(e) {
+          warning("Impossible d'appliquer l'échelle logarithmique à l'axe X")
+        })
+      }
+      if (isTRUE(input$logScaleY)) {
+        tryCatch({
+          p <- p + scale_y_log10()
+        }, error = function(e) {
+          warning("Impossible d'appliquer l'échelle logarithmique à l'axe Y")
+        })
+      }
+      if (isTRUE(input$reverseY)) {
+        p <- p + scale_y_reverse()
+      }
+      if (isTRUE(input$fixedAspectRatio)) {
+        p <- p + coord_fixed()
+      }
+      
+      # Labels et titres avec validation des entrées
+      labels_list <- list()
+      if (!is.null(input$plotTitle) && nchar(trimws(input$plotTitle)) > 0) {
+        labels_list$title <- trimws(input$plotTitle)
+      }
+      if (!is.null(input$plotSubtitle) && nchar(trimws(input$plotSubtitle)) > 0) {
+        labels_list$subtitle <- trimws(input$plotSubtitle)
+      }
+      if (!is.null(input$plotXLab) && nchar(trimws(input$plotXLab)) > 0) {
+        labels_list$x <- trimws(input$plotXLab)
+      }
+      if (!is.null(input$plotYLab) && nchar(trimws(input$plotYLab)) > 0) {
+        labels_list$y <- trimws(input$plotYLab)
+      }
+      if (!is.null(input$plotCaption) && nchar(trimws(input$plotCaption)) > 0) {
+        labels_list$caption <- trimws(input$plotCaption)
+      }
+      
+      if (length(labels_list) > 0) {
+        p <- p + do.call(labs, labels_list)
+      }
+      
+      # Palette de couleurs avec gestion d'erreur
+      if (!is.null(color_var) && !is.null(input$plotPalette) && input$plotPalette != "default") {
+        tryCatch({
+          palette_name <- as.character(input$plotPalette)
+          if (palette_name %in% c("viridis", "plasma", "inferno")) {
+            p <- p + scale_fill_viridis_d(option = palette_name) +
+              scale_color_viridis_d(option = palette_name)
+          } else {
+            p <- p + scale_fill_brewer(palette = palette_name) +
+              scale_color_brewer(palette = palette_name)
+          }
+        }, error = function(e) {
+          warning(paste("Impossible d'appliquer la palette:", palette_name))
+        })
+      }
+      
+      # Couleurs personnalisées avec validation
+      if (isTRUE(input$customColors) && !is.null(color_var)) {
+        color1 <- if (!is.null(input$color1) && nchar(input$color1) > 0) input$color1 else "#3498db"
+        color2 <- if (!is.null(input$color2) && nchar(input$color2) > 0) input$color2 else "#e74c3c"
+        colors <- c(color1, color2)
+        tryCatch({
+          p <- p + scale_fill_manual(values = colors) +
+            scale_color_manual(values = colors)
+        }, error = function(e) {
+          warning("Erreur dans l'application des couleurs personnalisées")
+        })
+      }
+      
+      # Améliorations du thème avec gestion d'erreur
+      tryCatch({
+        p <- p + theme(
+          axis.line = element_line(color = "black"),
+          axis.ticks = element_line(color = "black"),
+          plot.title = element_text(size = 16, face = "bold"),
+          plot.subtitle = element_text(size = 12),
+          legend.position = "bottom",
+          panel.grid.minor = element_blank()
+        )
+      }, error = function(e) {
+        warning("Erreur dans l'application du thème personnalisé")
+      })
+      
+      # Sauvegarde des résultats
+      values$currentInteractivePlot <- p
+      values$plotData <- plot_data
+      
+      showNotification("Visualisation générée avec succès!", type = "success", duration = 3)
+      
+    }, error = function(e) {
+      error_msg <- paste("Erreur lors de la génération du graphique:", e$message)
+      showNotification(error_msg, type = "error", duration = 10)
+      cat("Erreur détaillée:", conditionMessage(e), "\n")
+      traceback()
+    })
+  })
+  
+  # Informations d'agrégation sécurisées
   output$aggregationInfo <- renderText({
     req(input$useAggregation)
     
@@ -5945,529 +6571,216 @@ server <- function(input, output, session) {
       return("Configuration d'agrégation incomplète.")
     }
     
-    # Correction : gestion sécurisée du switch avec as.character
-    agg_text <- switch(as.character(input$aggFunction),
-                       "mean" = "Moyenne",
-                       "median" = "Médiane", 
-                       "sum" = "Somme",
-                       "count" = "Comptage",
-                       "min" = "Minimum",
-                       "max" = "Maximum",
-                       "sd" = "Écart-type",
-                       "Fonction inconnue")  # Valeur par défaut
+    # Liste des fonctions d'agrégation avec noms français
+    agg_names <- c(
+      "mean" = "Moyenne",
+      "median" = "Médiane", 
+      "sum" = "Somme",
+      "count" = "Comptage",
+      "min" = "Minimum",
+      "max" = "Maximum",
+      "sd" = "Écart-type"
+    )
     
-    paste0("Agrégation: ", agg_text, " de '", input$vizYVar, "'\n",
+    agg_text <- agg_names[[input$aggFunction]]
+    if (is.null(agg_text)) agg_text <- "Fonction inconnue"
+    
+    y_vars_text <- if (length(input$vizYVar) > 1) {
+      paste("Variables:", paste(input$vizYVar, collapse = ", "))
+    } else {
+      paste("Variable:", input$vizYVar)
+    }
+    
+    group_count <- if (exists("values") && !is.null(values$aggregatedData)) {
+      nrow(values$aggregatedData)
+    } else {
+      "En cours de calcul..."
+    }
+    
+    paste0("Agrégation: ", agg_text, "\n",
+           y_vars_text, "\n",
            "Groupement par: ", paste(input$groupVars, collapse = ", "), "\n",
-           "Nombre de groupes: ", 
-           ifelse(exists("values") && !is.null(values$aggregatedData), 
-                  nrow(values$aggregatedData), "En cours de calcul..."))
+           "Nombre de groupes: ", group_count)
   })
   
-  # Génération de la visualisation corrigée
-  observeEvent(input$generateViz, {
-    req(values$filteredData, input$vizXVar, input$vizYVar, input$vizType)
+  # Informations saisonnières
+  output$seasonalInfo <- renderText({
+    req(input$vizType == "seasonal")
     
-    tryCatch({
-      # Vérification des variables
-      if (!(input$vizXVar %in% names(values$filteredData))) {
-        showNotification("Variable X non trouvée dans les données", type = "error")
-        return()
-      }
-      if (!(input$vizYVar %in% names(values$filteredData))) {
-        showNotification("Variable Y non trouvée dans les données", type = "error")
-        return()
-      }
-      
-      # Préparation des données
-      plot_data <- values$filteredData
-      
-      # Agrégation si activée - avec vérifications supplémentaires
-      if (!is.null(input$useAggregation) && input$useAggregation && 
-          !is.null(input$groupVars) && length(input$groupVars) > 0) {
-        
-        # Vérifier que les variables de groupement existent
-        missing_vars <- setdiff(input$groupVars, names(plot_data))
-        if (length(missing_vars) > 0) {
-          showNotification(paste("Variables de groupement manquantes:", paste(missing_vars, collapse = ", ")), 
-                           type = "warning")
-          return()
-        }
-        
-        # Vérifier que la fonction d'agrégation est valide
-        valid_functions <- c("mean", "median", "sum", "min", "max", "sd", "count")
-        if (!(input$aggFunction %in% valid_functions)) {
-          showNotification("Fonction d'agrégation non valide", type = "error")
-          return()
-        }
-        
-        # Pour le comptage, on peut utiliser n'importe quelle variable comme référence
-        agg_var <- input$vizYVar
-        
-        plot_data <- aggregateData(plot_data, input$groupVars, input$aggFunction, agg_var)
-        values$aggregatedData <- plot_data
-        
-        # Vérifier que l'agrégation a fonctionné
-        if (nrow(plot_data) == 0) {
-          showNotification("L'agrégation n'a produit aucun résultat", type = "warning")
-          return()
-        }
-      }
-      
-      # Vérifier que les variables existent toujours après agrégation
-      if (!(input$vizXVar %in% names(plot_data))) {
-        showNotification("Variable X non disponible après agrégation", type = "error")
-        return()
-      }
-      if (!(input$vizYVar %in% names(plot_data))) {
-        showNotification("Variable Y non disponible après agrégation", type = "error")
-        return()
-      }
-      
-      x_var <- input$vizXVar
-      y_var <- input$vizYVar
-      color_var <- if (!is.null(input$vizColorVar) && input$vizColorVar != "Aucun") input$vizColorVar else NULL
-      facet_var <- if (!is.null(input$vizFacetVar) && input$vizFacetVar != "Aucun") input$vizFacetVar else NULL
-      
-      # Vérifier que les variables de couleur et facette existent
-      if (!is.null(color_var) && !(color_var %in% names(plot_data))) {
-        showNotification("Variable de couleur non disponible après agrégation", type = "warning")
-        color_var <- NULL
-      }
-      if (!is.null(facet_var) && !(facet_var %in% names(plot_data))) {
-        showNotification("Variable de facette non disponible après agrégation", type = "warning")
-        facet_var <- NULL
-      }
-      
-      # Construction du graphique base
-      base_aes <- if (!is.null(color_var)) {
-        aes(x = !!sym(x_var), y = !!sym(y_var), color = !!sym(color_var))
-      } else {
-        aes(x = !!sym(x_var), y = !!sym(y_var))
-      }
-      
-      p <- ggplot(plot_data, base_aes)
-      
-      # Application du type de visualisation avec correction switch
-      viz_type <- as.character(input$vizType)
-      
-      if (viz_type == "scatter") {
-        jitter_points <- if (!is.null(input$jitterPoints)) input$jitterPoints else FALSE
-        plot_alpha <- if (!is.null(input$plotAlpha)) input$plotAlpha else 0.7
-        plot_size <- if (!is.null(input$plotSize)) input$plotSize else 2
-        
-        if (jitter_points) {
-          p <- p + geom_jitter(alpha = plot_alpha, size = plot_size, width = 0.2)
-        } else {
-          p <- p + geom_point(alpha = plot_alpha, size = plot_size)
-        }
-        
-      } else if (viz_type == "seasonal") {
-        # Nouvelle courbe d'évolution saisonnière
-        show_points <- if (!is.null(input$showPoints)) input$showPoints else TRUE
-        show_lines <- if (!is.null(input$showLines)) input$showLines else TRUE
-        plot_alpha <- if (!is.null(input$plotAlpha)) input$plotAlpha else 0.7
-        plot_size <- if (!is.null(input$plotSize)) input$plotSize else 2
-        line_width <- if (!is.null(input$lineWidth)) input$lineWidth else 1
-        
-        if (show_points) {
-          p <- p + geom_point(alpha = plot_alpha, size = plot_size)
-        }
-        if (show_lines) {
-          if (!is.null(color_var)) {
-            p <- p + geom_line(aes(group = !!sym(color_var)), 
-                               alpha = plot_alpha, linewidth = line_width)
-          } else {
-            p <- p + geom_line(alpha = plot_alpha, linewidth = line_width)
-          }
-        }
-        
-        # Lissage saisonnier optionnel
-        smooth_method <- if (!is.null(input$smoothMethod)) as.character(input$smoothMethod) else "none"
-        if (smooth_method != "none") {
-          show_confidence <- if (!is.null(input$showConfidenceInterval)) input$showConfidenceInterval else TRUE
-          
-          smooth_args <- list(se = show_confidence, alpha = 0.3)
-          
-          # Gestion sécurisée des méthodes de lissage
-          if (smooth_method == "loess") {
-            smooth_span <- if (!is.null(input$smoothSpan)) input$smoothSpan else 0.75
-            smooth_args$method <- "loess"
-            smooth_args$span <- smooth_span
-          } else if (smooth_method == "lm") {
-            smooth_args$method <- "lm"
-          } else if (smooth_method == "gam") {
-            smooth_args$method <- "gam"
-            smooth_args$formula <- y ~ s(x, bs = "cs")  # Spline cyclique pour saisonnalité
-          } else if (smooth_method == "seasonal") {
-            # Méthode spéciale pour saisonnalité
-            smooth_args$method <- "gam"
-            smooth_args$formula <- y ~ s(x, bs = "cc")  # Spline cyclique contrainte
-          }
-          
-          p <- p + do.call(geom_smooth, smooth_args)
-        }
-        
-      } else if (viz_type == "area") {
-        plot_alpha <- if (!is.null(input$plotAlpha)) input$plotAlpha else 0.7
-        if (!is.null(color_var)) {
-          p <- p + geom_area(aes(fill = !!sym(color_var)), alpha = plot_alpha, position = "stack")
-        } else {
-          p <- p + geom_area(alpha = plot_alpha)
-        }
-        
-      } else if (viz_type == "box") {
-        plot_alpha <- if (!is.null(input$plotAlpha)) input$plotAlpha else 0.7
-        if (!is.null(color_var)) {
-          p <- p + geom_boxplot(aes(fill = !!sym(color_var)), alpha = plot_alpha)
-        } else {
-          p <- p + geom_boxplot(alpha = plot_alpha)
-        }
-        
-      } else if (viz_type == "violin") {
-        plot_alpha <- if (!is.null(input$plotAlpha)) input$plotAlpha else 0.7
-        if (!is.null(color_var)) {
-          p <- p + geom_violin(aes(fill = !!sym(color_var)), alpha = plot_alpha)
-        } else {
-          p <- p + geom_violin(alpha = plot_alpha)
-        }
-        
-      } else if (viz_type == "bar") {
-        plot_alpha <- if (!is.null(input$plotAlpha)) input$plotAlpha else 0.7
-        if (!is.null(color_var)) {
-          p <- p + geom_bar(aes(fill = !!sym(color_var)), stat = "identity", alpha = plot_alpha)
-        } else {
-          p <- p + geom_bar(stat = "identity", alpha = plot_alpha)
-        }
-        
-      } else if (viz_type == "line") {
-        plot_alpha <- if (!is.null(input$plotAlpha)) input$plotAlpha else 0.7
-        line_width <- if (!is.null(input$lineWidth)) input$lineWidth else 1
-        if (!is.null(color_var)) {
-          p <- p + geom_line(aes(group = !!sym(color_var)), alpha = plot_alpha, linewidth = line_width)
-        } else {
-          p <- p + geom_line(alpha = plot_alpha, linewidth = line_width)
-        }
-        
-      } else if (viz_type == "density") {
-        plot_alpha <- if (!is.null(input$plotAlpha)) input$plotAlpha else 0.7
-        if (!is.null(color_var)) {
-          p <- p + geom_density(aes(fill = !!sym(color_var)), alpha = plot_alpha)
-        } else {
-          p <- p + geom_density(alpha = plot_alpha)
-        }
-        
-      } else if (viz_type == "histogram") {
-        plot_alpha <- if (!is.null(input$plotAlpha)) input$plotAlpha else 0.7
-        if (!is.null(color_var)) {
-          p <- p + geom_histogram(aes(fill = !!sym(color_var)), alpha = plot_alpha, bins = 30)
-        } else {
-          p <- p + geom_histogram(alpha = plot_alpha, bins = 30)
-        }
-        
-      } else if (viz_type == "heatmap") {
-        if (!is.null(input$useAggregation) && input$useAggregation && 
-            !is.null(input$groupVars)) {
-          # Utiliser les données agrégées pour le heatmap
-          heatmap_data <- plot_data
-        } else {
-          heatmap_data <- plot_data %>%
-            group_by(across(c(!!sym(x_var), !!sym(y_var)))) %>%
-            summarise(Count = n(), .groups = "drop")
-          y_var <- "Count"
-        }
-        
-        p <- ggplot(heatmap_data, aes(x = !!sym(x_var), y = !!sym(y_var), fill = !!sym(y_var))) +
-          geom_tile() +
-          scale_fill_gradient(low = "white", high = "red")
-      }
-      
-      # Facetting
-      if (!is.null(facet_var)) {
-        p <- p + facet_wrap(vars(!!sym(facet_var)), scales = "free")
-      }
-      
-      # Application du thème avec correction switch
-      plot_theme <- if (!is.null(input$plotTheme)) as.character(input$plotTheme) else "minimal"
-      theme_func <- switch(plot_theme,
-                           "classic" = theme_classic(),
-                           "minimal" = theme_minimal(),
-                           "gray" = theme_gray(),
-                           "dark" = theme_dark(),
-                           "linedraw" = theme_linedraw(),
-                           "void" = theme_void(),
-                           "economist" = theme_minimal(),
-                           theme_minimal())  # Valeur par défaut
-      
-      p <- p + theme_func
-      
-      # Personnalisations des axes
-      if (!is.null(input$logScaleX) && input$logScaleX) p <- p + scale_x_log10()
-      if (!is.null(input$logScaleY) && input$logScaleY) p <- p + scale_y_log10()
-      if (!is.null(input$reverseY) && input$reverseY) p <- p + scale_y_reverse()
-      
-      # Ratio d'aspect fixe
-      if (!is.null(input$fixedAspectRatio) && input$fixedAspectRatio) {
-        p <- p + coord_fixed()
-      }
-      
-      # Labels et titres
-      labels_list <- list()
-      if (!is.null(input$plotTitle) && nchar(input$plotTitle) > 0) labels_list$title <- input$plotTitle
-      if (!is.null(input$plotSubtitle) && nchar(input$plotSubtitle) > 0) labels_list$subtitle <- input$plotSubtitle
-      if (!is.null(input$plotXLab) && nchar(input$plotXLab) > 0) labels_list$x <- input$plotXLab
-      if (!is.null(input$plotYLab) && nchar(input$plotYLab) > 0) labels_list$y <- input$plotYLab
-      if (!is.null(input$plotCaption) && nchar(input$plotCaption) > 0) labels_list$caption <- input$plotCaption
-      
-      if (length(labels_list) > 0) {
-        p <- p + do.call(labs, labels_list)
-      }
-      
-      # Palette de couleurs
-      plot_palette <- if (!is.null(input$plotPalette)) as.character(input$plotPalette) else "default"
-      if (!is.null(color_var) && plot_palette != "default") {
-        if (plot_palette %in% c("viridis", "plasma", "inferno")) {
-          p <- p + scale_fill_viridis_d(option = plot_palette) +
-            scale_color_viridis_d(option = plot_palette)
-        } else {
-          p <- p + scale_fill_brewer(palette = plot_palette) +
-            scale_color_brewer(palette = plot_palette)
-        }
-      }
-      
-      # Couleurs personnalisées
-      if (!is.null(input$customColors) && input$customColors && !is.null(color_var)) {
-        color1 <- if (!is.null(input$color1)) input$color1 else "#3498db"
-        color2 <- if (!is.null(input$color2)) input$color2 else "#e74c3c"
-        colors <- c(color1, color2)
-        p <- p + scale_fill_manual(values = colors) +
-          scale_color_manual(values = colors)
-      }
-      
-      # Améliorations du thème
-      p <- p + theme(
-        axis.line = element_line(color = "black"),
-        axis.ticks = element_line(color = "black"),
-        plot.title = element_text(size = 16, face = "bold"),
-        plot.subtitle = element_text(size = 12),
-        legend.position = "bottom",
-        panel.grid.minor = element_blank()
+    seasonal_types <- c(
+      "trend" = "Tendance simple avec lissage",
+      "decomposition" = "Décomposition en tendance/saisonnalité/résidus",
+      "moving_average" = "Moyennes mobiles centrées",
+      "annual_cycle" = "Analyse du cycle annuel",
+      "seasonal_variance" = "Variabilité saisonnière"
+    )
+    
+    type_desc <- seasonal_types[[input$seasonalType]]
+    if (is.null(type_desc)) type_desc <- "Type non reconnu"
+    
+    info_text <- paste0("Type: ", type_desc)
+    
+    if (!is.null(input$seasonalPeriod) && input$seasonalType != "trend") {
+      info_text <- paste0(info_text, "\nPériode: ", input$seasonalPeriod, " observations")
+    }
+    
+    if (!is.null(input$smoothMethod) && input$smoothMethod != "none") {
+      smooth_names <- c(
+        "loess" = "LOESS (régression locale)",
+        "lm" = "Régression linéaire",
+        "gam" = "Modèle additif généralisé",
+        "seasonal_gam" = "GAM avec composante saisonnière",
+        "cyclic_spline" = "Spline cyclique"
       )
-      
-      values$currentInteractivePlot <- p
-      values$plotData <- plot_data
-      
-      showNotification("Visualisation générée avec succès!", type = "success")
-      
-    }, error = function(e) {
-      showNotification(paste("Erreur lors de la génération du graphique:", e$message), type = "error")
-      print(paste("Erreur détaillée:", e$message))
-    })
+      smooth_desc <- smooth_names[[input$smoothMethod]]
+      if (!is.null(smooth_desc)) {
+        info_text <- paste0(info_text, "\nLissage: ", smooth_desc)
+      }
+    }
+    
+    if (!is.null(input$vizYVar) && length(input$vizYVar) > 1) {
+      info_text <- paste0(info_text, "\nVariables analysées: ", length(input$vizYVar))
+    }
+    
+    return(info_text)
   })
   
-  # Rendu du graphique interactif
+  # Rendu du graphique interactif avec gestion d'erreur robuste
   output$advancedPlot <- renderPlotly({
     req(values$currentInteractivePlot)
     tryCatch({
-      width_val <- if (!is.null(input$plotWidthInteractive)) input$plotWidthInteractive else 1000
-      height_val <- if (!is.null(input$plotHeightInteractive)) input$plotHeightInteractive else 650
+      width_val <- if (!is.null(input$plotWidthInteractive) && is.numeric(input$plotWidthInteractive)) {
+        max(300, min(3000, input$plotWidthInteractive))
+      } else {
+        1000
+      }
+      
+      height_val <- if (!is.null(input$plotHeightInteractive) && is.numeric(input$plotHeightInteractive)) {
+        max(300, min(2000, input$plotHeightInteractive))
+      } else {
+        650
+      }
       
       p_interactive <- ggplotly(values$currentInteractivePlot, 
                                 width = width_val, 
                                 height = height_val) %>%
         layout(
           dragmode = "zoom",
-          showlegend = TRUE
+          showlegend = TRUE,
+          margin = list(l = 50, r = 50, t = 50, b = 50)
         ) %>%
         config(
           displayModeBar = TRUE,
           modeBarButtonsToRemove = c("lasso2d", "select2d"),
-          displaylogo = FALSE
+          displaylogo = FALSE,
+          toImageButtonOptions = list(
+            format = "png",
+            filename = "custom_image",
+            height = height_val,
+            width = width_val,
+            scale = 1
+          )
         )
       
       return(p_interactive)
     }, error = function(e) {
-      showNotification(paste("Erreur lors de la création du graphique interactif:", e$message), type = "error")
+      showNotification(paste("Erreur lors de la création du graphique interactif:", e$message), 
+                       type = "error", duration = 10)
       return(NULL)
     })
   })
   
-  # Réinitialiser le zoom
+  # Réinitialiser le zoom avec gestion d'erreur
   observeEvent(input$resetZoom, {
-    runjs("
-    var plot = document.getElementById('advancedPlot');
-    if (plot && plot.layout) {
-      Plotly.relayout(plot, {
-        'xaxis.autorange': true,
-        'yaxis.autorange': true
-      });
-    }
-  ")
+    tryCatch({
+      runjs("
+      var plot = document.getElementById('advancedPlot');
+      if (plot && plot.layout) {
+        Plotly.relayout(plot, {
+          'xaxis.autorange': true,
+          'yaxis.autorange': true
+        });
+      }
+    ")
+      showNotification("Zoom réinitialisé", type = "message", duration = 2)
+    }, error = function(e) {
+      showNotification("Impossible de réinitialiser le zoom", type = "warning")
+    })
   })
   
-  # Prévisualisation des dimensions d'export
-  output$exportPreview <- renderText({
-    width_cm <- if (!is.null(input$exportWidthCm)) input$exportWidthCm else 20
-    height_cm <- if (!is.null(input$exportHeightCm)) input$exportHeightCm else 15
-    width_px <- if (!is.null(input$exportWidth)) input$exportWidth else 1920
-    height_px <- if (!is.null(input$exportHeight)) input$exportHeight else 1080
-    dpi <- if (!is.null(input$exportDPI)) input$exportDPI else 300
-    
-    paste0("Dimensions vectorielles: ", width_cm, " × ", height_cm, " cm\n",
-           "Dimensions pixel: ", width_px, " × ", height_px, " px\n",
-           "Résolution: ", dpi, " DPI\n",
-           "Taille estimée: ", round(width_px * height_px * 3 / 1024^2, 1), " MB")
-  })
-  
-  # Statistiques des données
-  output$dataStatsSummary <- renderText({
-    req(values$plotData)
-    data <- values$plotData
-    
-    paste0("Nombre d'observations: ", nrow(data), "\n",
-           "Nombre de variables: ", ncol(data), "\n",
-           "Variables numériques: ", sum(sapply(data, is.numeric)), "\n",
-           "Variables catégorielles: ", sum(sapply(data, function(x) is.factor(x) || is.character(x))))
-  })
-  
-  # Statistiques du graphique
-  output$plotStatsSummary <- renderText({
-    req(values$currentInteractivePlot, input$vizXVar, input$vizYVar)
-    
-    viz_type_name <- switch(as.character(input$vizType),
-                            "scatter" = "Nuage de points",
-                            "seasonal" = "Courbe saisonnière",
-                            "box" = "Boxplot",
-                            "violin" = "Violon",
-                            "bar" = "Barres",
-                            "line" = "Lignes",
-                            "density" = "Densité",
-                            "histogram" = "Histogramme",
-                            "heatmap" = "Heatmap",
-                            "area" = "Aires empilées",
-                            "Inconnu")
-    
-    plot_info <- paste0("Type: ", viz_type_name, "\n",
-                        "Variable X: ", input$vizXVar, "\n",
-                        "Variable Y: ", input$vizYVar)
-    
-    if (!is.null(input$vizColorVar) && input$vizColorVar != "Aucun") {
-      plot_info <- paste0(plot_info, "\nVariable couleur: ", input$vizColorVar)
-    }
-    
-    if (!is.null(input$useAggregation) && input$useAggregation) {
-      agg_name <- switch(as.character(input$aggFunction),
-                         "mean" = "Moyenne",
-                         "median" = "Médiane",
-                         "sum" = "Somme",
-                         "count" = "Comptage",
-                         "min" = "Minimum",
-                         "max" = "Maximum",
-                         "sd" = "Écart-type",
-                         "Inconnue")
-      plot_info <- paste0(plot_info, "\nAgrégation: ", agg_name)
-    }
-    
-    return(plot_info)
-  })
-  
-  # Téléchargement PNG standard
+  # Téléchargements avec validation et DPI élevé
   output$downloadInteractivePlot <- downloadHandler(
     filename = function() {
-      paste0("visualisation_", Sys.Date(), ".png")
+      paste0("visualisation_", Sys.Date(), "_", format(Sys.time(), "%H%M%S"), ".png")
     },
     content = function(file) {
       req(values$currentInteractivePlot)
       tryCatch({
-        width_val <- if (!is.null(input$plotWidthInteractive)) input$plotWidthInteractive else 1000
-        height_val <- if (!is.null(input$plotHeightInteractive)) input$plotHeightInteractive else 650
+        # Validation et récupération des dimensions
+        width_val <- if (!is.null(input$plotWidthInteractive) && is.numeric(input$plotWidthInteractive)) {
+          max(300, min(3000, input$plotWidthInteractive))
+        } else {
+          1000
+        }
         
+        height_val <- if (!is.null(input$plotHeightInteractive) && is.numeric(input$plotHeightInteractive)) {
+          max(300, min(2000, input$plotHeightInteractive))
+        } else {
+          650
+        }
+        
+        # DPI avec validation
+        dpi_val <- if (!is.null(input$exportDPIConfig) && is.numeric(input$exportDPIConfig)) {
+          max(72, min(20000, input$exportDPIConfig))
+        } else {
+          300
+        }
+        
+        # Avertissement pour DPI élevé
+        if (dpi_val > 1200) {
+          showNotification(paste0("Export PNG haute résolution en cours (", dpi_val, " DPI)..."), 
+                           type = "message", duration = 5)
+        }
+        
+        # Export avec gestion d'erreur
         ggsave(file, plot = values$currentInteractivePlot,
                width = width_val/100, 
                height = height_val/100,
-               dpi = 200, units = "in", device = "png")
+               dpi = dpi_val, units = "in", device = "png")
+        
+        # Calcul de la taille du fichier
+        file_size_mb <- round(file.size(file) / (1024^2), 2)
+        
+        showNotification(paste0("PNG exporté: ", dpi_val, " DPI, ", file_size_mb, " MB"), 
+                         type = "success", duration = 5)
+        
       }, error = function(e) {
-        showNotification(paste("Erreur lors de la sauvegarde:", e$message), type = "error")
+        showNotification(paste("Erreur lors de la sauvegarde PNG:", e$message), 
+                         type = "error", duration = 10)
       })
     }
   )
   
-  # Téléchargement SVG
+  # Téléchargement SVG avec validation
   output$downloadInteractivePlotSVG <- downloadHandler(
     filename = function() {
-      paste0("visualisation_", Sys.Date(), ".svg")
+      paste0("visualisation_", Sys.Date(), "_", format(Sys.time(), "%H%M%S"), ".svg")
     },
     content = function(file) {
       req(values$currentInteractivePlot)
       tryCatch({
-        width_cm <- if (!is.null(input$exportWidthCm)) input$exportWidthCm else 20
-        height_cm <- if (!is.null(input$exportHeightCm)) input$exportHeightCm else 15
+        # Export SVG
         ggsave(file, plot = values$currentInteractivePlot,
-               width = width_cm, height = height_cm,
+               width = 20, height = 15,
                units = "cm", device = "svg")
-      }, error = function(e) {
-        showNotification(paste("Erreur lors de la sauvegarde SVG:", e$message), type = "error")
-      })
-    }
-  )
-  
-  # Export personnalisé
-  output$downloadCustomExport <- downloadHandler(
-    filename = function() {
-      vector_format <- if (!is.null(input$vectorFormat)) as.character(input$vectorFormat) else "svg"
-      export_format <- if (!is.null(input$exportFormat)) as.character(input$exportFormat) else "png"
-      format <- if (vector_format %in% c("svg", "pdf", "eps")) vector_format else export_format
-      paste0("visualisation_custom_", Sys.Date(), ".", format)
-    },
-    content = function(file) {
-      req(values$currentInteractivePlot)
-      tryCatch({
-        vector_format <- if (!is.null(input$vectorFormat)) as.character(input$vectorFormat) else "svg"
-        export_format <- if (!is.null(input$exportFormat)) as.character(input$exportFormat) else "png"
         
-        # Choix entre export vectoriel et bitmap
-        if (vector_format %in% c("svg", "pdf", "eps")) {
-          # Export vectoriel
-          device_func <- switch(vector_format,
-                                "svg" = "svg",
-                                "pdf" = "pdf", 
-                                "eps" = "ps",
-                                "svg")  # Valeur par défaut
-          
-          width_cm <- if (!is.null(input$exportWidthCm)) input$exportWidthCm else 20
-          height_cm <- if (!is.null(input$exportHeightCm)) input$exportHeightCm else 15
-          
-          ggsave(file, plot = values$currentInteractivePlot,
-                 width = width_cm, height = height_cm,
-                 units = "cm", device = device_func)
-          
-        } else {
-          # Export bitmap haute résolution
-          device_func <- export_format
-          
-          width_px <- if (!is.null(input$exportWidth)) input$exportWidth else 1920
-          height_px <- if (!is.null(input$exportHeight)) input$exportHeight else 1080
-          dpi <- if (!is.null(input$exportDPI)) input$exportDPI else 300
-          
-          # Paramètres spéciaux pour JPEG
-          if (export_format == "jpeg") {
-            jpeg_quality <- if (!is.null(input$jpegQuality)) input$jpegQuality else 95
-            ggsave(file, plot = values$currentInteractivePlot,
-                   width = width_px/dpi, 
-                   height = height_px/dpi,
-                   dpi = dpi, units = "in", device = device_func,
-                   quality = jpeg_quality)
-          } else {
-            ggsave(file, plot = values$currentInteractivePlot,
-                   width = width_px/dpi, 
-                   height = height_px/dpi,
-                   dpi = dpi, units = "in", device = device_func)
-          }
-        }
-        
-        showNotification("Export réussi!", type = "success")
+        file_size_kb <- round(file.size(file) / 1024, 1)
+        showNotification(paste0("SVG exporté: 20×15 cm, ", file_size_kb, " KB"), 
+                         type = "success", duration = 5)
         
       }, error = function(e) {
-        showNotification(paste("Erreur lors de l'export personnalisé:", e$message), type = "error")
+        showNotification(paste("Erreur lors de la sauvegarde SVG:", e$message), 
+                         type = "error", duration = 10)
       })
     }
   )
