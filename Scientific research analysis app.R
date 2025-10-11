@@ -37,7 +37,7 @@ install_and_load <- function(packages) {
 required_packages <- c(
   "shiny", "shinydashboard", "shinyjs", "shinyWidgets", "shinyalert","DT", "shinycssloaders",
   "RColorBrewer", "colourpicker", "ggrepel",  "openxlsx", "rmarkdown", "haven",
-  "dplyr", "knitr", "stringr", "scales", "ggplot2", "ggdendro", "reshape2",
+  "dplyr", "knitr", "stringr", "scales", "ggplot2", "ggdendro", "reshape2", "sortable",
   "tibble", "plotrix", "plotly",  "qqplotr", "tidyr",  "report", "see", "corrplot",
   "car", "agricolae","forcats", "bslib", "factoextra",  "FactoMineR","questionr",
   "MASS", "cluster", "GGally", "psych", "nortest", "lmtest", "multcomp","FSA",
@@ -1967,6 +1967,19 @@ ui <- dashboardPage(
                       )
                     ),
                     
+                    # Éditeur d'ordre pour X catégoriel (seasonal_evolution)
+                    conditionalPanel(
+                      condition = "input.vizType == 'seasonal_evolution' && (input.xVarType == 'factor' || input.xVarType == 'categorical' || input.xVarType == 'text' || (input.xVarType == 'auto'))",
+                      div(class = "well", 
+                          style = "background-color: #f0fff0; border-left: 4px solid #28a745; padding: 15px; border-radius: 5px; margin-top: 10px;",
+                          h5(icon("sort"), " Ordre de la variable X", 
+                             style = "color: #28a745; font-weight: bold; margin-top: 0;"),
+                          uiOutput("xOrderEditor"),
+                          helpText(icon("lightbulb"), 
+                                   "Définissez l'ordre d'apparition des catégories sur l'axe X pour refléter votre logique d'analyse (ex: T1+3, T1+7, T1+13, T2+3...)")
+                      )
+                    ),
+                    
                     # Options pour les dates
                     conditionalPanel(
                       condition = "input.xVarType == 'date'",
@@ -1982,7 +1995,7 @@ ui <- dashboardPage(
                       )
                     ),
                     
-                    # ===== SÉLECTION Y AMÉLIORÉE 
+                    # Sélection Y améliorée
                     div(style = "margin-top: 15px; margin-bottom: 15px;",
                         uiOutput("vizYVarSelect")
                     ),
@@ -2058,30 +2071,107 @@ ui <- dashboardPage(
                     # Options pour seasonal_evolution
                     conditionalPanel(
                       condition = "input.vizType == 'seasonal_evolution'",
-                      div(class = "well", style = "background-color: #f0fff0; border-left: 4px solid #28a745; padding: 15px; border-radius: 5px; margin-top: 15px;",
-                          h5("Options d'évolution saisonnière", style = "color: #28a745; font-weight: bold; margin-top: 0;"),
-                          numericInput("evolutionLineWidth", "Épaisseur des lignes:", value = 1.2, min = 0.25, max = 5, step = 0.25),
-                          numericInput("evolutionPointSize", "Taille des points:", value = 2, min = 0.5, max = 6, step = 0.5),
+                      div(class = "well", 
+                          style = "background-color: #f0fff0; border-left: 4px solid #28a745; padding: 15px; border-radius: 5px; margin-top: 15px;",
+                          h5("Options d'évolution temporelle", 
+                             style = "color: #28a745; font-weight: bold; margin-top: 0;"),
+                          
+                          # Infos sur le type de variable X
+                          conditionalPanel(
+                            condition = "input.xVarType == 'factor' || input.xVarType == 'categorical' || input.xVarType == 'text'",
+                            div(style = "margin-bottom: 15px; padding: 10px; background-color: #d4edda; border-radius: 4px;",
+                                icon("check-circle", style = "color: #28a745;"),
+                                strong(" Mode catégoriel détecté"),
+                                p(style = "margin: 5px 0 0 0; font-size: 12px;",
+                                  "L'axe X utilisera vos catégories dans l'ordre défini ci-dessus.")
+                            )
+                          ),
+                          
+                          conditionalPanel(
+                            condition = "input.xVarType == 'date'",
+                            div(style = "margin-bottom: 15px; padding: 10px; background-color: #d1ecf1; border-radius: 4px;",
+                                icon("calendar-alt", style = "color: #0c5460;"),
+                                strong(" Mode temporel"),
+                                p(style = "margin: 5px 0 0 0; font-size: 12px;",
+                                  "L'axe X utilisera les dates dans l'ordre chronologique.")
+                            )
+                          ),
+                          
+                          # Style des éléments
+                          h6(icon("paint-brush"), " Style", 
+                             style = "font-weight: bold; margin-top: 15px; margin-bottom: 10px;"),
+                          
+                          div(style = "display: grid; grid-template-columns: 1fr 1fr; gap: 10px;",
+                              numericInput("evolutionLineWidth", "Épaisseur lignes:", 
+                                           value = 1.2, min = 0.25, max = 5, step = 0.25),
+                              numericInput("evolutionPointSize", "Taille points:", 
+                                           value = 2, min = 0.5, max = 6, step = 0.5)
+                          ),
+                          
                           selectInput("evolutionLineType", "Type de ligne:",
-                                      choices = c("Solide" = "solid", "Pointillé" = "dashed", "Tirets" = "dotted", "Mixte" = "dotdash"),
+                                      choices = c("Solide" = "solid", 
+                                                  "Pointillé" = "dashed", 
+                                                  "Tirets" = "dotted", 
+                                                  "Mixte" = "dotdash"),
                                       selected = "solid"),
-                          selectInput("evolutionDateFormat", "Format des dates (axe X):",
-                                      choices = c("Jour-Mois (01-Jan)" = "%d-%b",
-                                                  "Mois-Année (Jan-2024)" = "%b-%Y",
-                                                  "Date complète (01/01/2024)" = "%d/%m/%Y",
-                                                  "Mois abrégé (Jan)" = "%b",
-                                                  "Date courte (01/01)" = "%d/%m"),
-                                      selected = "%d-%b"),
-                          checkboxInput("evolutionShowGrid", "Afficher la grille", value = FALSE),
-                          checkboxInput("evolutionShowDataLabels", "Afficher les valeurs sur les points", value = FALSE),
+                          
+                          # Format et affichage
+                          h6(icon("eye"), " Affichage", 
+                             style = "font-weight: bold; margin-top: 15px; margin-bottom: 10px;"),
+                          
+                          conditionalPanel(
+                            condition = "input.xVarType == 'date'",
+                            selectInput("evolutionDateFormat", "Format des dates:",
+                                        choices = c("Jour-Mois (01-Jan)" = "%d-%b",
+                                                    "Mois-Année (Jan-2024)" = "%b-%Y",
+                                                    "Date complète (01/01/2024)" = "%d/%m/%Y",
+                                                    "Mois abrégé (Jan)" = "%b",
+                                                    "Date courte (01/01)" = "%d/%m"),
+                                        selected = "%d-%b")
+                          ),
+                          
+                          div(style = "display: flex; gap: 15px; margin: 10px 0;",
+                              checkboxInput("evolutionShowGrid", "Grille", value = FALSE),
+                              checkboxInput("evolutionShowDataLabels", "Valeurs", value = FALSE)
+                          ),
+                          
                           conditionalPanel(
                             condition = "input.evolutionShowDataLabels",
-                            numericInput("evolutionLabelSize", "Taille des étiquettes:", value = 3, min = 1, max = 6, step = 0.5),
-                            numericInput("evolutionLabelVjust", "Décalage vertical:", value = -0.5, min = -2, max = 2, step = 0.1)
+                            div(style = "margin-left: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 4px;",
+                                h6("Paramètres des étiquettes:", style = "font-size: 12px; font-weight: bold;"),
+                                div(style = "display: grid; grid-template-columns: 1fr 1fr; gap: 10px;",
+                                    numericInput("evolutionLabelSize", "Taille:", 
+                                                 value = 3, min = 1, max = 6, step = 0.5),
+                                    numericInput("evolutionLabelVjust", "Décalage:", 
+                                                 value = -0.5, min = -2, max = 2, step = 0.1)
+                                )
+                            )
                           ),
-                          sliderInput("evolutionXExpansion", "Expansion axe X (%):", min = 0, max = 20, value = 5, step = 1),
-                          sliderInput("evolutionYExpansion", "Expansion axe Y (%):", min = 0, max = 20, value = 10, step = 1),
-                          helpText(icon("chart-line"), "Visualisez les tendances temporelles brutes. Utilisez une variable de date pour l'axe X.")
+                          
+                          # Expansion des axes
+                          h6(icon("expand-arrows-alt"), " Marges des axes", 
+                             style = "font-weight: bold; margin-top: 15px; margin-bottom: 10px;"),
+                          
+                          div(style = "display: grid; grid-template-columns: 1fr 1fr; gap: 10px;",
+                              sliderInput("evolutionXExpansion", "Axe X (%):", 
+                                          min = 0, max = 20, value = 5, step = 1),
+                              sliderInput("evolutionYExpansion", "Axe Y (%):", 
+                                          min = 0, max = 20, value = 10, step = 1)
+                          ),
+                          
+                          # Conseil d'agrégation
+                          conditionalPanel(
+                            condition = "!input.useAggregation",
+                            div(style = "margin-top: 15px; padding: 10px; background-color: #fff3cd; border-left: 3px solid #ffc107; border-radius: 4px;",
+                                icon("info-circle", style = "color: #856404;"),
+                                strong(" Conseil:", style = "color: #856404;"),
+                                p(style = "margin: 5px 0 0 0; font-size: 12px; color: #856404;",
+                                  "Activez l'agrégation pour calculer les moyennes par groupe (ex: par traitement et période).")
+                            )
+                          ),
+                          
+                          helpText(icon("chart-line"), 
+                                   "Visualisez l'évolution de vos données dans l'ordre que vous définissez. Parfait pour les comparaisons temporelles ou séquentielles.")
                       )
                     ),
                     
@@ -2186,7 +2276,7 @@ ui <- dashboardPage(
                       )
                     ),
                     
-                    # Zone de visualisation avec indicateur de chargement
+                    # Zone de visualisation
                     div(id = "plotContainer", style = "position: relative; min-height: 650px;",
                         conditionalPanel(
                           condition = "$('html').hasClass('shiny-busy')",
@@ -2362,8 +2452,6 @@ ui <- dashboardPage(
                                 ),
                                 
                                 # Onglet Statistiques
-                                
-                                # Onglet Statistiques
                                 tabPanel("Statistiques", icon = icon("chart-bar"),
                                          br(),
                                          fluidRow(
@@ -2408,11 +2496,37 @@ ui <- dashboardPage(
                                                  tags$ul(style = "margin-bottom: 0;",
                                                          tags$li(strong("Nuage de points:"), "Relations entre variables numériques"),
                                                          tags$li(strong("Courbe saisonnière avec lissage:"), "Tendances avec lissage LOESS/GAM"),
-                                                         tags$li(strong("Courbe évolution saison:"), "Évolution temporelle brute"),
+                                                         tags$li(strong("Courbe évolution saison:"), "Évolution temporelle brute (dates ou catégories)"),
                                                          tags$li(strong("Boxplot/Violon:"), "Distribution et quartiles"),
                                                          tags$li(strong("Barres:"), "Comparaisons catégoriques"),
                                                          tags$li(strong("Heatmap:"), "Matrice de fréquences/corrélations")
                                                  )
+                                             ),
+                                             
+                                             div(class = "alert alert-success", style = "border-left: 4px solid #28a745;",
+                                                 h5(icon("sort-amount-down"), " Courbe d'évolution avec variables catégorielles"),
+                                                 p("La courbe d'évolution supporte maintenant les variables catégorielles, facteurs et texte :"),
+                                                 tags$ul(
+                                                   tags$li(strong("Ordre personnalisé:"), 
+                                                           "Glissez-déposez les catégories pour définir leur ordre d'apparition sur l'axe X"),
+                                                   tags$li(strong("Agrégation recommandée:"), 
+                                                           "Utilisez l'agrégation par moyenne pour calculer des statistiques par groupe (ex: traitement + période)"),
+                                                   tags$li(strong("Variable de couleur:"), 
+                                                           "Ajoutez une variable de couleur pour comparer plusieurs séries (ex: traitements)"),
+                                                   tags$li(strong("Cas d'usage typiques:"), 
+                                                           "Périodes d'observation (T1+3, T1+7...), phases expérimentales, catégories ordonnées")
+                                                 ),
+                                                 div(style = "background-color: white; padding: 10px; border-radius: 4px; margin-top: 10px;",
+                                                     strong(icon("example"), " Exemple:"), br(),
+                                                     tags$code(style = "font-size: 11px;",
+                                                               "Variable X: 'Observation period treatment' (catégorielle)\n",
+                                                               "Variable Y: 'Bemisia'\n",
+                                                               "Variable couleur: 'Treatment'\n",
+                                                               "Agrégation: Moyenne par [Locality, Treatment, Observation period treatment]"
+                                                     )
+                                                 ),
+                                                 helpText(icon("lightbulb"), 
+                                                          "Cette approche est idéale pour visualiser l'évolution de mesures répétées dans le temps ou selon une séquence logique.")
                                              ),
                                              
                                              div(class = "alert alert-info", style = "border-left: 4px solid #17a2b8;",
@@ -2423,7 +2537,7 @@ ui <- dashboardPage(
                                                          tags$li(strong("Évolution saison:"), "Affiche les données brutes avec lignes et points pour voir les variations exactes")
                                                  ),
                                                  p(style = "margin-top: 10px; margin-bottom: 0;", icon("exclamation-circle"), 
-                                                   " Important: Utilisez toujours une variable de type Date pour l'axe X.")
+                                                   " Important: Pour les dates, utilisez toujours une variable de type Date pour l'axe X.")
                                              ),
                                              
                                              div(class = "alert alert-success", style = "border-left: 4px solid #28a745;",
@@ -2502,7 +2616,8 @@ ui <- dashboardPage(
                                                    tags$li(strong("Préparation:"), "Nettoyez vos données (pas de NA dans variables clés)"),
                                                    tags$li(strong("Type de variable:"), "Vérifiez que le type X correspond au graphique souhaité"),
                                                    tags$li(strong("Facetting:"), "Limitez à 2-10 catégories pour éviter la surcharge visuelle"),
-                                                   tags$li(strong("Dates:"), "Utilisez toujours le type Date pour les analyses temporelles"),
+                                                   tags$li(strong("Dates:"), "Utilisez toujours le type Date pour les analyses temporelles classiques"),
+                                                   tags$li(strong("Catégories ordonnées:"), "Utilisez l'éditeur d'ordre pour définir une séquence logique (T1+3, T1+7...)"),
                                                    tags$li(strong("Étiquettes:"), "Personnalisez les niveaux pour améliorer la lisibilité"),
                                                    tags$li(strong("Export:"), "Choisissez le format selon l'usage final (web vers PNG/SVG, impression vers PDF/EPS)")
                                                  )
@@ -2515,6 +2630,7 @@ ui <- dashboardPage(
                                                          tags$li("Double-cliquez pour réinitialiser le zoom rapidement"),
                                                          tags$li("Survolez les points pour voir les valeurs exactes"),
                                                          tags$li("Testez différents types de lissage pour trouver le meilleur ajustement"),
+                                                         tags$li("Glissez-déposez les catégories pour définir un ordre personnalisé"),
                                                          tags$li("Exportez en SVG pour éditer dans Illustrator/Inkscape si nécessaire")
                                                  )
                                              )
@@ -3181,20 +3297,67 @@ ui <- dashboardPage(
       
       # ---- Seuils d'efficacité ----
       tabItem(tabName = "threshold",
+              # Message d'information sur la mise à jour automatique
               fluidRow(
-                box(title = "Configuration de l'analyse", status = "primary", width = 4, solidHeader = TRUE,
-                    # Sélection des variables
+                box(width = 12, status = "info", solidHeader = FALSE,
+                    icon("info-circle"), 
+                    strong(" Mode mise à jour automatique activé : "),
+                    "Les modifications sont appliquées instantanément au graphique. Aucun besoin de cliquer sur un bouton !",
+                    style = "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; border-radius: 8px; margin-bottom: 15px;")
+              ),
+              
+              fluidRow(
+                box(title = tagList(icon("sliders"), " Configuration de l'analyse"), 
+                    status = "primary", width = 4, solidHeader = TRUE, collapsible = TRUE,
+                    
+                    # Section Variables
+                    div(style = "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 12px; border-radius: 8px; margin-bottom: 15px;",
+                        h5(icon("database"), " Sélection des variables", 
+                           style = "color: white; font-weight: bold; margin: 0;")
+                    ),
+                    
                     uiOutput("thresholdXVarSelect"),
+                    
+                    h6(icon("chart-line"), " Variables Y (Efficacité)", 
+                       style = "font-weight: bold; color: #3c8dbc; margin-top: 15px;"),
+                    checkboxInput("thresholdMultipleY", 
+                                  tagList(icon("layer-group"), " Activer la sélection multiple de Y"), 
+                                  value = FALSE),
                     uiOutput("thresholdYVarSelect"),
                     
-                    hr(),
-                    h5(icon("bullseye"), " Seuil d'efficacité", style = "font-weight: bold; color: #3c8dbc;"),
-                    numericInput("thresholdValue", "Valeur du seuil (%):", 
+                    # Info sur les couleurs pour Y multiple
+                    conditionalPanel(
+                      condition = "input.thresholdMultipleY && input.thresholdYVar && input.thresholdYVar.length > 1",
+                      div(style = "background-color: #e3f2fd; padding: 12px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #2196F3;",
+                          icon("palette", style = "color: #2196F3;"),
+                          strong(" Info : "), 
+                          "Les couleurs des variables Y multiples utilisent automatiquement la palette ggplot2 par défaut pour une meilleure distinction visuelle."
+                      )
+                    ),
+                    
+                    hr(style = "border-top: 2px solid #3c8dbc; margin: 20px 0;"),
+                    
+                    # Section Seuil
+                    div(style = "background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 12px; border-radius: 8px; margin-bottom: 15px;",
+                        h5(icon("bullseye"), " Paramètres du seuil", 
+                           style = "color: white; font-weight: bold; margin: 0;")
+                    ),
+                    
+                    numericInput("thresholdValue", 
+                                 tagList(icon("percent"), " Valeur du seuil (%)"), 
                                  value = 80, min = 0, max = 100, step = 1),
-                    colourInput("thresholdColor", "Couleur de la ligne de seuil:", 
-                                value = "#e74c3c", showColour = "background"),
-                    numericInput("thresholdLineWidth", "Épaisseur de la ligne:", 
-                                 value = 1.5, min = 0.5, max = 5, step = 0.5),
+                    
+                    fluidRow(
+                      column(6,
+                             colourInput("thresholdColor", "Couleur de la ligne:", 
+                                         value = "#e74c3c", showColour = "background")
+                      ),
+                      column(6,
+                             numericInput("thresholdLineWidth", "Épaisseur:", 
+                                          value = 1.5, min = 0.5, max = 5, step = 0.5)
+                      )
+                    ),
+                    
                     selectInput("thresholdLineType", "Type de ligne:",
                                 choices = c("Solide" = "solid",
                                             "Pointillé" = "dotted",
@@ -3204,174 +3367,422 @@ ui <- dashboardPage(
                                             "Deux tirets" = "twodash"),
                                 selected = "solid"),
                     
-                    hr(),
-                    h5(icon("filter"), " Filtrage des données", style = "font-weight: bold; color: #f39c12;"),
+                    hr(style = "border-top: 2px solid #f39c12; margin: 20px 0;"),
+                    
+                    # Section Filtrage
+                    div(style = "background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); padding: 12px; border-radius: 8px; margin-bottom: 15px;",
+                        h5(icon("filter"), " Filtrage des données", 
+                           style = "color: #d35400; font-weight: bold; margin: 0;")
+                    ),
+                    
                     uiOutput("thresholdFilterSelect"),
                     
-                    hr(),
-                    h5(icon("tag"), " Éditeur de labels X", style = "font-weight: bold; color: #27ae60;"),
+                    hr(style = "border-top: 2px solid #27ae60; margin: 20px 0;"),
+                    
+                    # Section Éditeur de labels X
+                    div(style = "background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); padding: 12px; border-radius: 8px; margin-bottom: 15px;",
+                        h5(icon("tag"), " Personnalisation des labels X", 
+                           style = "color: #16a085; font-weight: bold; margin: 0;")
+                    ),
+                    
+                    div(style = "background-color: #fff9e6; padding: 10px; border-radius: 6px; margin-bottom: 10px; border-left: 4px solid #f39c12;",
+                        icon("lightbulb", style = "color: #f39c12;"),
+                        em(" Astuce : Modifiez les étiquettes des traitements et appliquez des styles (gras/italique) pour une meilleure présentation.")
+                    ),
+                    
                     uiOutput("thresholdLevelsEditor"),
                     
-                    hr(),
-                    h5(icon("palette"), " Options graphiques", style = "font-weight: bold; color: #8e44ad;"),
+                    # Section Éditeur de labels de légende (Y multiples)
+                    conditionalPanel(
+                      condition = "input.thresholdMultipleY && input.thresholdYVar && input.thresholdYVar.length > 1",
+                      hr(style = "border-top: 2px solid #9b59b6; margin: 20px 0;"),
+                      
+                      div(style = "background: linear-gradient(135deg, #da22ff 0%, #9733ee 100%); padding: 12px; border-radius: 8px; margin-bottom: 15px;",
+                          h5(icon("list-ul"), " Personnalisation des labels de légende", 
+                             style = "color: white; font-weight: bold; margin: 0;")
+                      ),
+                      
+                      div(style = "background-color: #f3e5f5; padding: 10px; border-radius: 6px; margin-bottom: 10px; border-left: 4px solid #9b59b6;",
+                          icon("info-circle", style = "color: #9b59b6;"),
+                          em(" Info : Personnalisez les étiquettes affichées dans la légende pour les variables Y sélectionnées.")
+                      ),
+                      
+                      uiOutput("thresholdLegendEditor")
+                    ),
+                    
+                    hr(style = "border-top: 2px solid #8e44ad; margin: 20px 0;"),
+                    
+                    # Section Options graphiques
+                    div(style = "background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%); padding: 12px; border-radius: 8px; margin-bottom: 15px;",
+                        h5(icon("palette"), " Options graphiques avancées", 
+                           style = "color: white; font-weight: bold; margin: 0;")
+                    ),
                     
                     # Titres et labels
-                    div(style = "background-color: #f9f9f9; padding: 10px; border-radius: 5px; margin-bottom: 10px;",
-                        h6(icon("heading"), " Titres et étiquettes", style = "font-weight: bold; color: #34495e;"),
+                    div(style = "background-color: #f9f9f9; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px solid #e0e0e0;",
+                        h6(icon("heading"), " Titres et étiquettes", 
+                           style = "font-weight: bold; color: #34495e; margin-bottom: 10px;"),
                         textInput("thresholdPlotTitle", "Titre du graphique:", 
                                   value = "Analyse des seuils d'efficacité"),
-                        textInput("thresholdXLabel", "Label axe X:", value = ""),
-                        textInput("thresholdYLabel", "Label axe Y:", value = "Seuil d'efficacité (%)")
+                        textInput("thresholdXLabel", "Label axe X:", 
+                                  value = "", placeholder = "Par défaut: Traitements"),
+                        textInput("thresholdYLabel", "Label axe Y:", 
+                                  value = "", placeholder = "Par défaut: Seuil d'efficacité (%)")
                     ),
                     
                     # Style des labels d'axes
-                    div(style = "background-color: #fff3cd; padding: 10px; border-radius: 5px; margin-bottom: 10px;",
-                        h6(icon("font"), " Style des labels d'axes", style = "font-weight: bold; color: #856404;"),
-                        strong("Label axe X:"),
-                        div(style = "margin-left: 15px; margin-top: 5px; margin-bottom: 10px; display: flex; gap: 15px;",
-                            checkboxInput("thresholdXLabelBold", "Gras", value = FALSE),
-                            checkboxInput("thresholdXLabelItalic", "Italique", value = FALSE)
+                    div(style = "background-color: #fff8e1; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px solid #ffd54f;",
+                        h6(icon("font"), " Style des labels d'axes", 
+                           style = "font-weight: bold; color: #f57f17; margin-bottom: 10px;"),
+                        
+                        div(style = "margin-bottom: 10px;",
+                            strong("Label axe X:"),
+                            div(style = "margin-left: 15px; margin-top: 5px; display: flex; gap: 15px;",
+                                checkboxInput("thresholdXLabelBold", "Gras", value = FALSE),
+                                checkboxInput("thresholdXLabelItalic", "Italique", value = FALSE)
+                            )
                         ),
-                        strong("Label axe Y:"),
-                        div(style = "margin-left: 15px; margin-top: 5px; display: flex; gap: 15px;",
-                            checkboxInput("thresholdYLabelBold", "Gras", value = FALSE),
-                            checkboxInput("thresholdYLabelItalic", "Italique", value = FALSE)
-                        )
-                    ),
-                    
-                    # Couleurs des barres
-                    div(style = "background-color: #e7f3ff; padding: 10px; border-radius: 5px; margin-bottom: 10px;",
-                        h6(icon("paint-brush"), " Couleurs des barres", style = "font-weight: bold; color: #0056b3;"),
-                        checkboxInput("thresholdUseColor", "Personnaliser les couleurs", value = TRUE),
-                        conditionalPanel(
-                          condition = "input.thresholdUseColor",
-                          radioButtons("thresholdBarColor", "Type de coloration:",
-                                       choices = c("ggplot2 (par défaut)" = "ggplot",
-                                                   "Par traitement (palette)" = "palette",
-                                                   "Par traitement (personnalisé)" = "custom",
-                                                   "Couleur unique" = "single",
-                                                   "Noir (monochrome)" = "black"),
-                                       selected = "ggplot"),
-                          conditionalPanel(
-                            condition = "input.thresholdBarColor == 'palette'",
-                            selectInput("thresholdPalette", "Palette de couleurs:",
-                                        choices = c("Set1" = "Set1", "Set2" = "Set2", "Set3" = "Set3",
-                                                    "Pastel1" = "Pastel1", "Paired" = "Paired",
-                                                    "Dark2" = "Dark2", "Accent" = "Accent",
-                                                    "Spectral" = "Spectral"),
-                                        selected = "Set1")
-                          ),
-                          conditionalPanel(
-                            condition = "input.thresholdBarColor == 'custom'",
-                            uiOutput("thresholdColorPickers")
-                          ),
-                          conditionalPanel(
-                            condition = "input.thresholdBarColor == 'single'",
-                            colourInput("thresholdSingleBarColor", "Couleur des barres:", 
-                                        value = "#3498db", showColour = "background")
+                        
+                        div(
+                          strong("Label axe Y:"),
+                          div(style = "margin-left: 15px; margin-top: 5px; display: flex; gap: 15px;",
+                              checkboxInput("thresholdYLabelBold", "Gras", value = FALSE),
+                              checkboxInput("thresholdYLabelItalic", "Italique", value = FALSE)
                           )
                         )
                     ),
                     
-                    # Légende
-                    div(style = "background-color: #fff8e1; padding: 10px; border-radius: 5px; margin-bottom: 10px;",
-                        h6(icon("list"), " Légende", style = "font-weight: bold; color: #f57c00;"),
-                        checkboxInput("thresholdShowLegend", "Afficher la légende", value = TRUE),
+                    # Couleurs des barres (une seule variable Y)
+                    conditionalPanel(
+                      condition = "!input.thresholdMultipleY || (input.thresholdYVar && input.thresholdYVar.length == 1)",
+                      div(style = "background-color: #e3f2fd; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px solid #90caf9;",
+                          h6(icon("paint-brush"), " Couleurs des barres", 
+                             style = "font-weight: bold; color: #1565c0; margin-bottom: 10px;"),
+                          
+                          checkboxInput("thresholdUseColor", 
+                                        tagList(icon("palette"), " Personnaliser les couleurs"), 
+                                        value = TRUE),
+                          
+                          conditionalPanel(
+                            condition = "input.thresholdUseColor",
+                            radioButtons("thresholdBarColor", "Type de coloration:",
+                                         choices = c("ggplot2 (défaut)" = "ggplot",
+                                                     "Palette prédéfinie" = "palette",
+                                                     "Personnalisé par traitement" = "custom",
+                                                     "Couleur unique" = "single",
+                                                     "Noir (monochrome)" = "black"),
+                                         selected = "ggplot"),
+                            
+                            conditionalPanel(
+                              condition = "input.thresholdBarColor == 'palette'",
+                              selectInput("thresholdPalette", "Choisir une palette:",
+                                          choices = list(
+                                            "Palettes qualitatives" = c("Set1" = "Set1", "Set2" = "Set2", "Set3" = "Set3",
+                                                                        "Pastel1" = "Pastel1", "Pastel2" = "Pastel2",
+                                                                        "Paired" = "Paired", "Dark2" = "Dark2", "Accent" = "Accent"),
+                                            "Palettes divergentes" = c("Spectral" = "Spectral", "RdYlBu" = "RdYlBu", "RdBu" = "RdBu"),
+                                            "Palettes séquentielles" = c("Blues" = "Blues", "Greens" = "Greens", 
+                                                                         "Oranges" = "Oranges", "Purples" = "Purples")
+                                          ),
+                                          selected = "Set1")
+                            ),
+                            
+                            conditionalPanel(
+                              condition = "input.thresholdBarColor == 'custom'",
+                              div(style = "max-height: 300px; overflow-y: auto; padding: 5px;",
+                                  uiOutput("thresholdColorPickers")
+                              )
+                            ),
+                            
+                            conditionalPanel(
+                              condition = "input.thresholdBarColor == 'single'",
+                              colourInput("thresholdSingleBarColor", "Couleur des barres:", 
+                                          value = "#3498db", showColour = "background")
+                            )
+                          )
+                      )
+                    ),
+                    
+                    # Dimensions des barres - AMÉLIORÉ
+                    div(style = "background-color: #f0f8ff; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px solid #b3d9ff;",
+                        h6(icon("arrows-alt-h"), " Dimensions et espacement des barres", 
+                           style = "font-weight: bold; color: #1e3a8a; margin-bottom: 10px;"),
+                        
+                        sliderInput("thresholdBarWidth", "Largeur des barres:", 
+                                    min = 0.1, max = 1, value = 0.8, step = 0.05),
+                        
+                        conditionalPanel(
+                          condition = "input.thresholdMultipleY && input.thresholdYVar && input.thresholdYVar.length > 1",
+                          
+                          sliderInput("thresholdBarSpacing", 
+                                      tagList(icon("arrows-alt-h"), " Espacement entre barres:"), 
+                                      min = 0, max = 0.5, value = 0.1, step = 0.05),
+                          
+                          div(style = "background-color: #e8f5e9; padding: 8px; border-radius: 4px; margin-top: 10px; border-left: 3px solid #4caf50;",
+                              icon("info-circle", style = "color: #388e3c;"),
+                              tags$small(" Plus l'espacement est élevé, plus les groupes de barres sont espacés.")
+                          ),
+                          
+                          radioButtons("thresholdBarPosition", "Position des barres:",
+                                       choices = c("Côte à côte" = "dodge",
+                                                   "Empilées" = "stack"),
+                                       selected = "dodge", inline = TRUE)
+                        )
+                    ),
+                    
+                    # Légende - AMÉLIORÉ
+                    div(style = "background-color: #fff3e0; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px solid #ffb74d;",
+                        h6(icon("list"), " Configuration de la légende", 
+                           style = "font-weight: bold; color: #e65100; margin-bottom: 10px;"),
+                        
+                        checkboxInput("thresholdShowLegend", 
+                                      tagList(icon("eye"), " Afficher la légende"), 
+                                      value = TRUE),
+                        
                         conditionalPanel(
                           condition = "input.thresholdShowLegend",
-                          selectInput("thresholdLegendPosition", "Position de la légende:",
+                          textInput("thresholdLegendTitle", "Titre de la légende:", 
+                                    value = "", placeholder = "Laisser vide pour défaut"),
+                          
+                          selectInput("thresholdLegendPosition", "Position:",
                                       choices = c("En bas" = "bottom",
                                                   "En haut" = "top",
                                                   "À gauche" = "left",
-                                                  "À droite" = "right"),
-                                      selected = "bottom")
+                                                  "À droite" = "right",
+                                                  "Coin supérieur droit" = "top_right",
+                                                  "Coin supérieur gauche" = "top_left",
+                                                  "Coin inférieur droit" = "bottom_right",
+                                                  "Coin inférieur gauche" = "bottom_left"),
+                                      selected = "bottom"),
+                          
+                          div(style = "display: flex; gap: 15px; margin-top: 5px;",
+                              checkboxInput("thresholdLegendBold", "Titre en gras", value = TRUE),
+                              checkboxInput("thresholdLegendItalic", "Titre en italique", value = FALSE)
+                          )
                         )
                     ),
                     
                     # Apparence des axes
-                    div(style = "background-color: #f0f0f0; padding: 10px; border-radius: 5px; margin-bottom: 10px;",
-                        h6(icon("ruler"), " Apparence des axes", style = "font-weight: bold; color: #2c3e50;"),
-                        checkboxInput("thresholdBlackAxes", "Axes en noir", value = TRUE),
-                        checkboxInput("thresholdShowAxisLines", "Afficher les lignes d'axes", value = TRUE),
-                        checkboxInput("thresholdShowTicks", "Afficher les graduations", value = TRUE),
-                        checkboxInput("thresholdShowGrid", "Afficher la grille", value = TRUE),
-                        checkboxInput("thresholdRotateLabels", "Incliner labels X à 45°", value = TRUE)
+                    div(style = "background-color: #f5f5f5; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px solid #cccccc;",
+                        h6(icon("ruler"), " Apparence des axes", 
+                           style = "font-weight: bold; color: #424242; margin-bottom: 10px;"),
+                        
+                        checkboxInput("thresholdBlackAxes", 
+                                      tagList(icon("paint-roller"), " Axes en noir (sinon gris)"), 
+                                      value = TRUE),
+                        checkboxInput("thresholdShowAxisLines", 
+                                      tagList(icon("minus"), " Afficher les lignes d'axes"), 
+                                      value = TRUE),
+                        checkboxInput("thresholdShowTicks", 
+                                      tagList(icon("grip-lines"), " Afficher les graduations"), 
+                                      value = TRUE),
+                        checkboxInput("thresholdShowGrid", 
+                                      tagList(icon("th"), " Afficher la grille"), 
+                                      value = TRUE),
+                        checkboxInput("thresholdRotateLabels", 
+                                      tagList(icon("undo"), " Incliner labels X à 45°"), 
+                                      value = TRUE)
                     ),
                     
                     # Tailles de texte
-                    div(style = "background-color: #f5f5f5; padding: 10px; border-radius: 5px; margin-bottom: 10px;",
-                        h6(icon("text-height"), " Tailles de texte", style = "font-weight: bold; color: #555;"),
-                        sliderInput("thresholdTitleSize", "Taille du titre:", 
+                    div(style = "background-color: #fce4ec; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px solid #f48fb1;",
+                        h6(icon("text-height"), " Tailles de texte", 
+                           style = "font-weight: bold; color: #c2185b; margin-bottom: 10px;"),
+                        
+                        sliderInput("thresholdTitleSize", "Titre:", 
                                     min = 8, max = 28, value = 16, step = 1),
-                        sliderInput("thresholdAxisTitleSize", "Taille titres axes:", 
+                        sliderInput("thresholdAxisTitleSize", "Titres des axes:", 
                                     min = 8, max = 24, value = 14, step = 1),
-                        sliderInput("thresholdAxisTextSize", "Taille texte axes:", 
+                        sliderInput("thresholdAxisTextSize", "Texte des axes:", 
                                     min = 6, max = 20, value = 12, step = 1),
-                        sliderInput("thresholdLegendSize", "Taille légende:", 
+                        sliderInput("thresholdLegendSize", "Légende:", 
                                     min = 6, max = 20, value = 10, step = 1)
                     ),
                     
                     # Limites de l'axe Y
-                    div(style = "background-color: #e8f5e9; padding: 10px; border-radius: 5px; margin-bottom: 10px;",
-                        h6(icon("arrows-alt-v"), " Limites axe Y", style = "font-weight: bold; color: #2e7d32;"),
+                    div(style = "background-color: #e8f5e9; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px solid #81c784;",
+                        h6(icon("arrows-alt-v"), " Limites de l'axe Y", 
+                           style = "font-weight: bold; color: #2e7d32; margin-bottom: 10px;"),
+                        
                         fluidRow(
                           column(6,
-                                 numericInput("thresholdYMin", "Minimum:", value = 0, min = 0, max = 100)
+                                 numericInput("thresholdYMin", "Minimum:", 
+                                              value = 0, min = 0, max = 100)
                           ),
                           column(6,
-                                 numericInput("thresholdYMax", "Maximum:", value = 100, min = 0, max = 100)
+                                 numericInput("thresholdYMax", "Maximum:", 
+                                              value = 100, min = 0, max = 200)
+                          )
+                        )
+                    )
+                ),
+                
+                # Panel principal du graphique
+                box(title = tagList(icon("chart-bar"), " Graphique des seuils d'efficacité"), 
+                    status = "primary", width = 8, solidHeader = TRUE, collapsible = TRUE,
+                    
+                    plotlyOutput("thresholdPlot", height = "600px"),
+                    
+                    br(),
+                    hr(style = "border-top: 2px solid #3c8dbc;"),
+                    
+                    # Section Export améliorée
+                    div(style = "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 15px; border-radius: 8px; margin-bottom: 15px;",
+                        h4(icon("download"), " Options d'exportation haute qualité", 
+                           style = "color: white; font-weight: bold; margin: 0;")
+                    ),
+                    
+                    # Avertissement DPI
+                    div(style = "background-color: #fff3cd; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #ff9800;",
+                        icon("exclamation-triangle", style = "color: #f57c00;"),
+                        strong(" Important : "),
+                        "Le DPI peut aller jusqu'à 20000 pour les formats raster. Au-delà de 1200 DPI, les fichiers deviennent très volumineux. Pour une qualité optimale sans limite, utilisez les formats vectoriels (SVG, PDF, EPS)."
+                    ),
+                    
+                    # Préréglages rapides
+                    div(style = "background-color: #e8eaf6; padding: 15px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #5c6bc0;",
+                        h6(icon("magic"), " Préréglages rapides", 
+                           style = "font-weight: bold; color: #3f51b5; margin-bottom: 10px;"),
+                        
+                        fluidRow(
+                          column(3,
+                                 actionButton("presetWeb", "Web/Écran",
+                                              class = "btn-info btn-block",
+                                              icon = icon("desktop"),
+                                              style = "margin-bottom: 5px;",
+                                              onclick = "Shiny.setInputValue('thresholdExportWidth', 1920); Shiny.setInputValue('thresholdExportHeight', 1080); Shiny.setInputValue('thresholdExportDPI', 150); Shiny.setInputValue('thresholdExportFormat', 'png');"),
+                                 tags$small("1920×1080 px, 150 DPI", style = "color: #666;")
+                          ),
+                          column(3,
+                                 actionButton("presetPrint", "Impression",
+                                              class = "btn-success btn-block",
+                                              icon = icon("print"),
+                                              style = "margin-bottom: 5px;",
+                                              onclick = "Shiny.setInputValue('thresholdExportWidth', 3000); Shiny.setInputValue('thresholdExportHeight', 2000); Shiny.setInputValue('thresholdExportDPI', 300); Shiny.setInputValue('thresholdExportFormat', 'png');"),
+                                 tags$small("3000×2000 px, 300 DPI", style = "color: #666;")
+                          ),
+                          column(3,
+                                 actionButton("presetPublication", "Publication",
+                                              class = "btn-warning btn-block",
+                                              icon = icon("book"),
+                                              style = "margin-bottom: 5px;",
+                                              onclick = "Shiny.setInputValue('thresholdExportWidth', 5000); Shiny.setInputValue('thresholdExportHeight', 3500); Shiny.setInputValue('thresholdExportDPI', 600); Shiny.setInputValue('thresholdExportFormat', 'tiff');"),
+                                 tags$small("5000×3500 px, 600 DPI", style = "color: #666;")
+                          ),
+                          column(3,
+                                 actionButton("presetVectoriel", "Vectoriel",
+                                              class = "btn-danger btn-block",
+                                              icon = icon("bezier-curve"),
+                                              style = "margin-bottom: 5px;",
+                                              onclick = "Shiny.setInputValue('thresholdExportWidth', 2000); Shiny.setInputValue('thresholdExportHeight', 1500); Shiny.setInputValue('thresholdExportDPI', 300); Shiny.setInputValue('thresholdExportFormat', 'svg');"),
+                                 tags$small("SVG - Infinie", style = "color: #666;")
                           )
                         )
                     ),
                     
-                    hr(),
-                    actionButton("generateThresholdPlot", "Générer le graphique", 
-                                 class = "btn-primary btn-lg btn-block", 
-                                 icon = icon("chart-bar"),
-                                 style = "height: 50px; font-size: 16px; font-weight: bold;")
-                ),
-                
-                box(title = "Graphique des seuils d'efficacité", status = "primary", 
-                    width = 8, solidHeader = TRUE,
-                    plotlyOutput("thresholdPlot", height = "600px"),
-                    br(),
-                    hr(),
-                    h5(icon("download"), " Options d'export", style = "font-weight: bold; color: #3c8dbc;"),
+                    # Paramètres d'export détaillés
+                    div(style = "background-color: #f5f5f5; padding: 15px; border-radius: 6px; margin-bottom: 15px;",
+                        h6(icon("cogs"), " Paramètres personnalisés", 
+                           style = "font-weight: bold; color: #424242; margin-bottom: 10px;"),
+                        
+                        fluidRow(
+                          column(4,
+                                 numericInput("thresholdExportWidth", 
+                                              tagList(icon("arrows-alt-h"), " Largeur (pixels)"), 
+                                              value = 1200, min = 400, max = 20000, step = 100)
+                          ),
+                          column(4,
+                                 numericInput("thresholdExportHeight", 
+                                              tagList(icon("arrows-alt-v"), " Hauteur (pixels)"), 
+                                              value = 800, min = 400, max = 20000, step = 100)
+                          ),
+                          column(4,
+                                 numericInput("thresholdExportDPI", 
+                                              tagList(icon("crosshairs"), " Résolution (DPI)"), 
+                                              value = 300, min = 72, max = 20000, step = 50)
+                          )
+                        ),
+                        
+                        # Calcul automatique de la taille
+                        div(style = "background-color: #e1f5fe; padding: 10px; border-radius: 5px; margin: 10px 0; border-left: 4px solid #0288d1;",
+                            icon("info-circle", style = "color: #01579b;"),
+                            strong(" Aperçu : "),
+                            textOutput("exportSizeEstimate", inline = TRUE)
+                        )
+                    ),
+                    
+                    # Format d'export
                     fluidRow(
-                      column(4,
-                             numericInput("thresholdExportWidth", "Largeur (pouces):", 
-                                          value = 10, min = 4, max = 20, step = 1)
-                      ),
-                      column(4,
-                             numericInput("thresholdExportHeight", "Hauteur (pouces):", 
-                                          value = 8, min = 4, max = 20, step = 1)
-                      ),
-                      column(4,
-                             numericInput("thresholdExportDPI", "Résolution (DPI):", 
-                                          value = 300, min = 72, max = 20000, step = 50)
+                      column(12,
+                             selectInput("thresholdExportFormat", 
+                                         tagList(icon("file-image"), " Format d'export"),
+                                         choices = list(
+                                           "Formats raster (pixels)" = c("PNG (recommandé)" = "png",
+                                                                         "JPEG (compressé)" = "jpeg",
+                                                                         "TIFF (haute qualité)" = "tiff",
+                                                                         "BMP (non compressé)" = "bmp"),
+                                           "Formats vectoriels (résolution infinie)" = c("SVG (web, idéal)" = "svg",
+                                                                                         "PDF (publication)" = "pdf",
+                                                                                         "EPS (impression pro)" = "eps")
+                                         ),
+                                         selected = "png")
                       )
                     ),
-                    div(style = "padding: 10px; background-color: #e7f3ff; border-radius: 5px; margin-bottom: 15px;",
-                        icon("info-circle", style = "color: #3498db;"),
-                        strong(" Guide DPI:"), br(),
-                        "• 72-150: Affichage écran", br(),
-                        "• 300: Impression standard", br(),
-                        "• 600+: Impression haute qualité", br(),
-                        "• 1200+: Publication professionnelle"
+                    
+                    # Guide des formats - AMÉLIORÉ
+                    div(style = "background-color: #e3f2fd; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #2196f3;",
+                        icon("question-circle", style = "color: #1976d2;"),
+                        strong(" Guide des formats : "), br(),
+                        tags$ul(style = "margin-bottom: 0; padding-left: 20px; line-height: 1.8;",
+                                tags$li(tags$strong("PNG :"), " Idéal pour PowerPoint, web, réseaux sociaux. Sans perte, fond transparent possible."),
+                                tags$li(tags$strong("JPEG :"), " Fichier plus petit mais avec compression. Pour emails, partage rapide."),
+                                tags$li(tags$strong("TIFF :"), " Maximum de qualité. Pour impression professionnelle (magazines, posters)."),
+                                tags$li(tags$strong("SVG :"), " ⭐ Vectoriel, redimensionnable à l'infini ! Parfait pour web et édition ultérieure."),
+                                tags$li(tags$strong("PDF/EPS :"), " Standards scientifiques. Requis pour publications académiques.")
+                        )
                     ),
-                    downloadButton("downloadThresholdPlot", "Télécharger PNG", 
-                                   class = "btn-success btn-block", 
-                                   icon = icon("download"),
-                                   style = "font-size: 16px; font-weight: bold;")
+                    
+                    # Conseils d'utilisation
+                    div(style = "background-color: #f1f8e9; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #8bc34a;",
+                        icon("lightbulb", style = "color: #689f38;"),
+                        strong(" Conseils : "),
+                        tags$ul(style = "margin-bottom: 0; padding-left: 20px; margin-top: 5px;",
+                                tags$li("Pour présentation : PNG 1920×1080 à 150 DPI"),
+                                tags$li("Pour impression A4 : PNG 3000×2000 à 300 DPI"),
+                                tags$li("Pour poster : TIFF 5000+ pixels à 600 DPI"),
+                                tags$li("Pour publication : SVG ou PDF (résolution infinie)"),
+                                tags$li("Limite recommandée : 5000×5000 px à 600 DPI pour formats raster")
+                        )
+                    ),
+                    
+                    # Bouton de téléchargement stylisé
+                    downloadButton("downloadThresholdPlot", 
+                                   tagList(icon("download"), " Télécharger le graphique"), 
+                                   class = "btn-success btn-lg btn-block", 
+                                   style = "font-size: 18px; font-weight: bold; padding: 15px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1);")
                 )
               ),
               
+              # Tableau des données
               fluidRow(
-                box(title = "Tableau des données", status = "info", width = 12, solidHeader = TRUE,
+                box(title = tagList(icon("table"), " Tableau des données utilisées"), 
+                    status = "info", width = 12, solidHeader = TRUE, collapsible = TRUE, collapsed = FALSE,
+                    
+                    div(style = "background-color: #fff9e6; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #ffa726;",
+                        icon("info-circle", style = "color: #f57c00;"),
+                        strong(" Information : "),
+                        "Ce tableau affiche les données filtrées et transformées utilisées pour générer le graphique. ",
+                        "Vous pouvez copier, exporter en CSV ou Excel directement depuis le tableau."
+                    ),
+                    
                     DTOutput("thresholdDataTable"),
+                    
                     br(),
-                    downloadButton("downloadThresholdData", "Télécharger données (Excel)", 
-                                   class = "btn-info")
+                    
+                    downloadButton("downloadThresholdData", 
+                                   tagList(icon("file-excel"), " Télécharger données complètes (Excel)"), 
+                                   class = "btn-info btn-lg",
+                                   style = "font-size: 16px; font-weight: bold; padding: 12px 24px;")
                 )
               )
       ),
@@ -5864,6 +6275,24 @@ server <- function(input, output, session) {
     }
   })
   
+  # Stocker les niveaux actuels pour l'éditeur d'ordre
+  observe({
+    req(values$filteredData, input$vizXVar)
+    
+    data <- values$filteredData
+    x_var <- input$vizXVar
+    x_type <- if(input$xVarType == "auto") values$detectedXType else input$xVarType
+    
+    if(x_type %in% c("factor", "categorical", "text")) {
+      unique_vals <- if(is.factor(data[[x_var]])) {
+        levels(data[[x_var]])
+      } else {
+        unique(as.character(data[[x_var]]))
+      }
+      values$currentXLevels <- unique_vals
+    }
+  })
+  
   # Éditeur de niveaux amélioré pour la variable X
   output$xLevelsEditor <- renderUI({
     req(values$filteredData, input$vizXVar)
@@ -5874,7 +6303,6 @@ server <- function(input, output, session) {
     
     if(!x_type %in% c("factor", "categorical", "text", "date")) return(NULL)
     
-    # Obtenir les valeurs uniques
     if(x_type == "date") {
       if(!inherits(data[[x_var]], "Date") && !inherits(data[[x_var]], "POSIXt")) {
         return(div(
@@ -5906,7 +6334,6 @@ server <- function(input, output, session) {
       ))
     }
     
-    # Interface pour la modification des niveaux
     div(
       div(style = "margin-bottom: 10px;",
           div(style = "display: flex; justify-content: space-between; align-items: center;",
@@ -5917,7 +6344,6 @@ server <- function(input, output, session) {
           )
       ),
       
-      # Zone d'édition avec scroll si nombreux niveaux
       div(style = if(length(unique_vals) > 10) "max-height: 400px; overflow-y: auto; padding-right: 10px;" else "",
           lapply(seq_along(unique_vals), function(i) {
             lvl <- unique_vals[i]
@@ -5940,7 +6366,6 @@ server <- function(input, output, session) {
           })
       ),
       
-      # Boutons d'actions rapides
       if(length(unique_vals) > 3) {
         div(style = "margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e0;",
             h6("Actions rapides", style = "color: #666; font-weight: bold;"),
@@ -5956,6 +6381,63 @@ server <- function(input, output, session) {
             )
         )
       }
+    )
+  })
+  
+  # Éditeur d'ordre pour X catégoriel (seasonal_evolution)
+  output$xOrderEditor <- renderUI({
+    req(values$filteredData, input$vizXVar)
+    req(input$vizType == "seasonal_evolution")
+    
+    x_type <- if(input$xVarType == "auto") values$detectedXType else input$xVarType
+    
+    if(!x_type %in% c("factor", "categorical", "text")) return(NULL)
+    
+    data <- values$filteredData
+    x_var <- input$vizXVar
+    
+    unique_vals <- if(is.factor(data[[x_var]])) {
+      levels(data[[x_var]])
+    } else {
+      sort(unique(as.character(data[[x_var]])))
+    }
+    
+    if(length(unique_vals) == 0) return(NULL)
+    if(length(unique_vals) > 100) {
+      return(div(
+        p(paste("Trop de catégories (", length(unique_vals), "). Réduisez vos données."), 
+          style = "color: #ff9800; font-weight: bold;")
+      ))
+    }
+    
+    div(
+      div(style = "margin-bottom: 10px;",
+          div(style = "display: flex; justify-content: space-between; align-items: center;",
+              span(paste(length(unique_vals), "catégories détectées"), 
+                   style = "color: #666; font-size: 12px;"),
+              div(style = "display: flex; gap: 5px;",
+                  actionButton("autoSortX", "Tri auto", 
+                               class = "btn-default btn-xs", icon = icon("sort-alpha-down")),
+                  actionButton("resetOrderX", "Réinitialiser", 
+                               class = "btn-default btn-xs", icon = icon("undo"))
+              )
+          )
+      ),
+      
+      div(style = "max-height: 400px; overflow-y: auto; padding: 10px; background-color: #f8f9fa; border-radius: 4px;",
+          sortable::rank_list(
+            text = "Glissez pour réordonner les catégories",
+            labels = unique_vals,
+            input_id = "xLevelOrder",
+            options = sortable::sortable_options(
+              multiDrag = FALSE,
+              animation = 150
+            )
+          )
+      ),
+      
+      helpText(icon("lightbulb"), 
+               "Définissez l'ordre d'apparition des catégories sur l'axe X (de gauche à droite)")
     )
   })
   
@@ -6016,11 +6498,36 @@ server <- function(input, output, session) {
     showNotification("Préfixe ajouté", type = "message", duration = 2)
   })
   
+  # Actions pour l'ordre
+  observeEvent(input$autoSortX, {
+    req(values$currentXLevels)
+    
+    sorted_levels <- sort(values$currentXLevels)
+    sortable::update_rank_list(session, "xLevelOrder", labels = sorted_levels)
+    
+    showNotification("Tri alphabétique appliqué", type = "message", duration = 2)
+  })
+  
+  observeEvent(input$resetOrderX, {
+    req(values$filteredData, input$vizXVar)
+    
+    data <- values$filteredData
+    x_var <- input$vizXVar
+    
+    original_vals <- if(is.factor(data[[x_var]])) {
+      levels(data[[x_var]])
+    } else {
+      unique(as.character(data[[x_var]]))
+    }
+    
+    sortable::update_rank_list(session, "xLevelOrder", labels = original_vals)
+    showNotification("Ordre réinitialisé", type = "message", duration = 2)
+  })
+  
   # Sélection des variables de couleur
   output$vizColorVarSelect <- renderUI({
     req(values$filteredData)
     
-    # Vérifier si plusieurs Y sont sélectionnées
     multiple_y <- !is.null(input$vizYVar) && length(input$vizYVar) > 1
     
     if(multiple_y) {
@@ -6105,17 +6612,15 @@ server <- function(input, output, session) {
     })
   }
   
-  # Génération de la visualisation avec support Y multiple
+  # Génération de la visualisation avec support Y multiple et catégories
   observeEvent(input$generateViz, {
     req(values$filteredData, input$vizXVar, input$vizYVar, input$vizType)
     
-    # Validation: au moins une variable Y
     if(is.null(input$vizYVar) || length(input$vizYVar) == 0) {
       showNotification("Veuillez sélectionner au moins une variable Y", type = "warning", duration = 5)
       return()
     }
     
-    # Validation: certains types de graphiques ne supportent qu'une seule variable Y
     single_y_types <- c("box", "violin", "density", "histogram")
     if(input$vizType %in% single_y_types && length(input$vizYVar) > 1) {
       showNotification(
@@ -6125,33 +6630,28 @@ server <- function(input, output, session) {
     }
     
     tryCatch({
-      # Préparation des données
       plot_data <- values$filteredData
       
-      # Appliquer les étiquettes personnalisées pour la variable X
+      # Appliquer les étiquettes personnalisées pour X
       x_type <- if(input$xVarType == "auto") values$detectedXType else input$xVarType
       if (x_type %in% c("factor", "categorical", "text") && !is.null(input$vizXVar)) {
         x_var <- input$vizXVar
         
-        # Obtenir les valeurs uniques
         unique_vals <- if(is.factor(plot_data[[x_var]])) {
           levels(droplevels(plot_data[[x_var]]))
         } else {
           sort(unique(as.character(plot_data[[x_var]])))
         }
         
-        # Créer un mapping des anciennes vers les nouvelles étiquettes
         new_labels <- sapply(unique_vals, function(lvl) {
           input[[paste0("xLevel_", make.names(lvl))]] %||% lvl
         })
         
-        # Vérifier l'unicité des étiquettes
         if (any(duplicated(new_labels)) || any(new_labels == "")) {
           showNotification("Les étiquettes doivent être uniques et non vides.", type = "error", duration = 5)
           return()
         }
         
-        # Appliquer le mapping
         if(!is.factor(plot_data[[x_var]])) {
           plot_data[[x_var]] <- factor(plot_data[[x_var]], levels = unique_vals, labels = new_labels)
         } else {
@@ -6169,7 +6669,7 @@ server <- function(input, output, session) {
         })
       }
       
-      # Suppression des NA dans les variables clés
+      # Suppression des NA
       required_vars <- c(input$vizXVar, input$vizYVar)
       color_var <- if (!is.null(input$vizColorVar) && input$vizColorVar != "Aucun" && 
                        input$vizColorVar != "Automatique (Variables Y)" &&
@@ -6194,13 +6694,11 @@ server <- function(input, output, session) {
         return()
       }
       
-      # Variables pour le graphique
       x_var <- input$vizXVar
       y_vars <- input$vizYVar
       
-      # --- TRAITEMENT SPÉCIAL POUR MULTIPLE Y 
+      # Traitement multiple Y
       if(length(y_vars) > 1 && !(input$vizType %in% single_y_types)) {
-        # Transformation en format long pour ggplot
         plot_data_long <- plot_data %>%
           pivot_longer(
             cols = all_of(y_vars),
@@ -6208,7 +6706,6 @@ server <- function(input, output, session) {
             values_to = "Valeur_Y"
           )
         
-        # Si une variable de couleur existe déjà, on l'ignore au profit des Y multiples
         if(!is.null(color_var)) {
           showNotification(
             "Variable de couleur ignorée : les couleurs distinguent les variables Y.", 
@@ -6216,19 +6713,16 @@ server <- function(input, output, session) {
           )
         }
         
-        # Utiliser Variable_Y comme variable de couleur
         actual_color_var <- "Variable_Y"
         plot_data_to_use <- plot_data_long
         actual_y_var <- "Valeur_Y"
         
-        # Stocker info pour les stats
         values$multipleY <- TRUE
         values$yVarNames <- y_vars
         
       } else {
-        # Une seule variable Y ou type incompatible: comportement normal
         if(length(y_vars) > 1 && input$vizType %in% single_y_types) {
-          y_vars <- y_vars[1]  # Utiliser seulement la première
+          y_vars <- y_vars[1]
         }
         
         plot_data_to_use <- plot_data
@@ -6239,31 +6733,138 @@ server <- function(input, output, session) {
         values$yVarNames <- y_vars
       }
       
-      # Agrégation si activée
-      if (isTRUE(input$useAggregation) && !is.null(input$groupVars) && length(input$groupVars) > 0) {
-        if(values$multipleY) {
-          # Agrégation avec Y multiple
-          group_vars_agg <- c(input$groupVars, "Variable_Y")
-          plot_data_to_use <- aggregateData(plot_data_to_use, group_vars_agg, input$aggFunction, actual_y_var)
+      # TRAITEMENT SPÉCIAL SEASONAL_EVOLUTION AVEC CATÉGORIES
+      if (input$vizType == "seasonal_evolution") {
+        
+        # Appliquer l'ordre personnalisé si catégoriel
+        if(x_type %in% c("factor", "categorical", "text")) {
+          if(!is.null(input$xLevelOrder) && length(input$xLevelOrder) > 0) {
+            custom_order <- input$xLevelOrder
+            plot_data_to_use[[x_var]] <- factor(
+              plot_data_to_use[[x_var]], 
+              levels = custom_order, 
+              ordered = TRUE
+            )
+          } else {
+            if(!is.factor(plot_data_to_use[[x_var]])) {
+              plot_data_to_use[[x_var]] <- factor(plot_data_to_use[[x_var]])
+            }
+          }
+          
+          plot_data_to_use <- plot_data_to_use %>%
+            arrange(!!sym(x_var))
+        }
+        
+        # Agrégation
+        if(isTRUE(input$useAggregation) && 
+           !is.null(input$groupVars) && 
+           length(input$groupVars) > 0) {
+          
+          if(values$multipleY) {
+            group_vars_agg <- c(x_var, input$groupVars, "Variable_Y")
+            group_vars_agg <- unique(group_vars_agg)
+            
+            plot_data_to_use <- plot_data_to_use %>%
+              group_by(across(all_of(group_vars_agg))) %>%
+              summarise(!!sym(actual_y_var) := mean(!!sym(actual_y_var), na.rm = TRUE), 
+                        .groups = "drop") %>%
+              arrange(!!sym(x_var))
+            
+          } else {
+            group_vars_agg <- c(x_var, input$groupVars)
+            group_vars_agg <- unique(group_vars_agg)
+            
+            plot_data_to_use <- plot_data_to_use %>%
+              group_by(across(all_of(group_vars_agg))) %>%
+              summarise(!!sym(actual_y_var) := mean(!!sym(actual_y_var), na.rm = TRUE), 
+                        .groups = "drop") %>%
+              arrange(!!sym(x_var))
+          }
+          
+          values$aggregatedData <- plot_data_to_use
+        }
+        
+        # Construction esthétique
+        base_aes <- if (!is.null(actual_color_var)) {
+          aes(x = !!sym(x_var), y = !!sym(actual_y_var), 
+              color = !!sym(actual_color_var), 
+              group = !!sym(actual_color_var))
         } else {
-          plot_data_to_use <- aggregateData(plot_data_to_use, input$groupVars, input$aggFunction, actual_y_var)
+          aes(x = !!sym(x_var), y = !!sym(actual_y_var), group = 1)
         }
         
-        values$aggregatedData <- plot_data_to_use
+        p <- ggplot(plot_data_to_use, base_aes)
         
-        if (nrow(plot_data_to_use) == 0) {
-          showNotification("L'agrégation n'a produit aucun résultat", type = "warning", duration = 5)
-          return()
+        evolution_line_width <- input$evolutionLineWidth %||% 1.2
+        evolution_point_size <- input$evolutionPointSize %||% 2
+        evolution_line_type <- input$evolutionLineType %||% "solid"
+        
+        p <- p + 
+          geom_line(linewidth = evolution_line_width, 
+                    linetype = evolution_line_type,
+                    na.rm = TRUE) +
+          geom_point(size = evolution_point_size, na.rm = TRUE)
+        
+        # Étiquettes de données
+        if(isTRUE(input$evolutionShowDataLabels)) {
+          label_size <- input$evolutionLabelSize %||% 3
+          label_vjust <- input$evolutionLabelVjust %||% -0.5
+          
+          p <- p + geom_text(
+            aes(label = round(!!sym(actual_y_var), 1)),
+            size = label_size,
+            vjust = label_vjust,
+            show.legend = FALSE
+          )
         }
-      }
-      
-      # --- CONSTRUCTION DU GRAPHIQUE 
-      if (input$vizType == "seasonal_smooth") {
-        # Préparation spécifique pour seasonal_smooth
+        
+        # Échelles
+        if(x_type %in% c("factor", "categorical", "text")) {
+          p <- p + scale_x_discrete(drop = FALSE)
+        } else if(x_type == "date") {
+          p <- p + scale_x_date(
+            date_labels = input$evolutionDateFormat %||% "%d-%b",
+            expand = expansion(mult = c(0.01, 0.05))
+          )
+        }
+        
+        y_expansion <- (input$evolutionYExpansion %||% 10) / 100
+        
+        p <- p + scale_y_continuous(
+          expand = expansion(mult = c(0, y_expansion))
+        )
+        
+        # Grille
+        if(isTRUE(input$evolutionShowGrid)) {
+          p <- p + theme(
+            panel.grid.major = element_line(color = "grey90", linewidth = 0.3),
+            panel.grid.minor = element_line(color = "grey95", linewidth = 0.2)
+          )
+        } else {
+          p <- p + theme(
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank()
+          )
+        }
+        
+        # Thème
+        p <- p + theme_minimal(base_size = 14) +
+          theme(
+            panel.background = element_rect(fill = "white", color = NA),
+            plot.background = element_rect(fill = "white", color = NA),
+            axis.line = element_line(color = "black", linewidth = 0.5),
+            axis.ticks = element_line(color = "black", linewidth = 0.5),
+            legend.position = "bottom",
+            legend.margin = margin(t = 20),
+            axis.text.x = element_text(angle = input$xLabelAngle %||% 0, 
+                                       hjust = if((input$xLabelAngle %||% 0) > 0) 1 else 0.5)
+          )
+        
+      } else if (input$vizType == "seasonal_smooth") {
+        # Code pour seasonal_smooth (identique à l'original)
         if (inherits(plot_data_to_use[[x_var]], "Date") || inherits(plot_data_to_use[[x_var]], "POSIXt")) {
           plot_data_to_use[[x_var]] <- as.Date(plot_data_to_use[[x_var]])
           
-          # Agrégation par date et variables de groupement si nécessaire
           group_vars <- c(x_var)
           if (!is.null(actual_color_var)) group_vars <- c(group_vars, actual_color_var)
           if (!is.null(facet_var)) group_vars <- c(group_vars, facet_var)
@@ -6272,16 +6873,13 @@ server <- function(input, output, session) {
             group_by(across(all_of(group_vars))) %>%
             summarise(!!sym(actual_y_var) := mean(!!sym(actual_y_var), na.rm = TRUE), .groups = "drop")
           
-          # Tri par date
           plot_data_to_use <- plot_data_to_use[order(plot_data_to_use[[x_var]]), ]
         }
         
-        # Création de l'esthétique de base
         base_aes <- aes(x = !!sym(x_var), y = !!sym(actual_y_var))
         
         p <- ggplot(plot_data_to_use, base_aes)
         
-        # Ajout des géométries selon les options
         if (isTRUE(input$showLines)) {
           if (!is.null(actual_color_var)) {
             p <- p + geom_line(aes(color = !!sym(actual_color_var)),
@@ -6304,7 +6902,6 @@ server <- function(input, output, session) {
           }
         }
         
-        # Lissage
         if (isTRUE(input$showSmoothLine)) {
           smooth_params <- list(
             se = isTRUE(input$showConfidenceInterval),
@@ -6324,30 +6921,12 @@ server <- function(input, output, session) {
           }
         }
         
-        # Format des axes pour dates
         if (inherits(plot_data_to_use[[x_var]], "Date")) {
           p <- p + scale_x_date(
             date_labels = input$dateFormat %||% "%d-%b",
             expand = expansion(mult = c(0.01, 0.1))
           )
         }
-        
-      } else if (input$vizType == "seasonal_evolution") {
-        # Code pour seasonal_evolution
-        base_aes <- if (!is.null(actual_color_var)) {
-          aes(x = !!sym(x_var), y = !!sym(actual_y_var), color = !!sym(actual_color_var))
-        } else {
-          aes(x = !!sym(x_var), y = !!sym(actual_y_var))
-        }
-        
-        p <- ggplot(plot_data_to_use, base_aes)
-        
-        evolution_line_width <- input$evolutionLineWidth %||% 1.2
-        evolution_point_size <- input$evolutionPointSize %||% 2
-        
-        p <- p + 
-          geom_line(size = evolution_line_width, linetype = input$evolutionLineType %||% "solid") +
-          geom_point(size = evolution_point_size)
         
       } else {
         # Autres types de visualisation
@@ -6359,12 +6938,10 @@ server <- function(input, output, session) {
         
         p <- ggplot(plot_data_to_use, base_aes)
         
-        # Paramètres de style
         plot_alpha <- input$plotAlpha %||% 0.7
         plot_size <- input$plotSize %||% 2
         line_width <- input$lineWidth %||% 1
         
-        # Ajout des géométries selon le type
         if (input$vizType == "scatter") {
           if (isTRUE(input$jitterPoints)) {
             p <- p + geom_jitter(alpha = plot_alpha, size = plot_size, width = 0.2, height = 0)
@@ -6452,7 +7029,6 @@ server <- function(input, output, session) {
       values$currentInteractivePlot <- p
       values$plotData <- plot_data_to_use
       
-      # Message de succès personnalisé
       success_msg <- if(values$multipleY) {
         paste0("✓ Visualisation générée avec ", length(y_vars), " variables Y!")
       } else {
@@ -6508,7 +7084,6 @@ server <- function(input, output, session) {
       return(NULL)
     })
   })
-  
   
   # Réinitialiser le zoom
   observeEvent(input$resetZoom, {
@@ -6584,6 +7159,79 @@ server <- function(input, output, session) {
     showNotification("Preset Carré appliqué", type = "message", duration = 2)
   })
   
+  # Informations d'agrégation améliorées
+  output$aggregationInfo <- renderText({
+    req(input$useAggregation, values$aggregatedData)
+    
+    tryCatch({
+      agg_func_names <- c(
+        "mean" = "Moyenne", "median" = "Médiane", "sum" = "Somme",
+        "count" = "Comptage", "min" = "Minimum", "max" = "Maximum", "sd" = "Écart-type"
+      )
+      
+      agg_name <- agg_func_names[[input$aggFunction]] %||% "Inconnue"
+      
+      info_text <- paste0("Fonction: ", agg_name, "\n")
+      
+      if(!is.null(input$groupVars) && length(input$groupVars) > 0) {
+        info_text <- paste0(info_text, 
+                            "Groupement par: ", paste(input$groupVars, collapse = ", "), "\n")
+      }
+      
+      if(!is.null(values$aggregatedData)) {
+        info_text <- paste0(info_text,
+                            "Observations agrégées: ", nrow(values$aggregatedData), "\n",
+                            "Observations d'origine: ", nrow(values$filteredData))
+      }
+      
+      if(values$multipleY) {
+        info_text <- paste0(info_text, "\n\nMode multi-Y: Agrégation par variable")
+      }
+      
+      return(info_text)
+    }, error = function(e) {
+      "Erreur dans le calcul"
+    })
+  })
+  
+  # Information saisonnière améliorée
+  output$seasonalInfo <- renderText({
+    req(input$vizType %in% c("seasonal_smooth", "seasonal_evolution"))
+    
+    tryCatch({
+      x_type <- if(input$xVarType == "auto") values$detectedXType else input$xVarType
+      
+      info_text <- if(input$vizType == "seasonal_evolution") {
+        "Type: Courbe d'évolution temporelle\n"
+      } else {
+        "Type: Courbe avec lissage\n"
+      }
+      
+      info_text <- paste0(info_text, "Variable X: ", x_type, "\n")
+      
+      if(x_type %in% c("factor", "categorical", "text")) {
+        info_text <- paste0(info_text, 
+                            "Mode catégoriel activé\n",
+                            "Ordre personnalisé: ",
+                            if(!is.null(input$xLevelOrder)) "Oui" else "Par défaut")
+      }
+      
+      if(values$multipleY) {
+        info_text <- paste0(info_text, "\n\nComparaison de ", 
+                            length(values$yVarNames), " séries:\n",
+                            paste(values$yVarNames, collapse = "\n"))
+      }
+      
+      if(isTRUE(input$useAggregation)) {
+        info_text <- paste0(info_text, "\n\nAgrégation: Activée")
+      }
+      
+      return(info_text)
+    }, error = function(e) {
+      "Erreur"
+    })
+  })
+  
   # Statistiques des données
   output$dataStatsSummary <- renderText({
     req(values$plotData)
@@ -6605,7 +7253,6 @@ server <- function(input, output, session) {
                            "Valeurs manquantes: ", missing_values, "\n",
                            "Lignes complètes: ", complete_rows, " (", round(complete_rows/nrow(data)*100, 1), "%)")
       
-      # Ajouter info Y multiple si applicable
       if(!is.null(values$multipleY) && values$multipleY) {
         base_stats <- paste0(base_stats, "\n\n",
                              "Mode: Variables Y multiples\n",
@@ -6640,7 +7287,6 @@ server <- function(input, output, session) {
       
       viz_type_name <- viz_type_names[[input$vizType]] %||% "Type inconnu"
       
-      # Gérer l'affichage des variables Y
       y_display <- if(!is.null(values$multipleY) && values$multipleY) {
         paste0("Variables Y (", length(values$yVarNames), "): ", 
                paste(values$yVarNames, collapse = ", "))
@@ -6652,7 +7298,6 @@ server <- function(input, output, session) {
                           "Variable X: ", input$vizXVar, "\n",
                           y_display)
       
-      # Info couleur uniquement si pas Y multiple
       if(is.null(values$multipleY) || !values$multipleY) {
         if (!is.null(input$vizColorVar) && input$vizColorVar != "Aucun") {
           plot_info <- paste0(plot_info, "\nVariable couleur: ", input$vizColorVar)
@@ -6710,7 +7355,6 @@ server <- function(input, output, session) {
         summary_text <- paste0(summary_text, "Intervalle de confiance affiché\n")
       }
       
-      # Info Y multiple
       if(!is.null(values$multipleY) && values$multipleY) {
         summary_text <- paste0(summary_text, "\nMode Y multiple: Comparaison de ", 
                                length(values$yVarNames), " séries temporelles")
@@ -6895,12 +7539,25 @@ server <- function(input, output, session) {
       
       estimated_size_mb <- round((max(width_px, px_from_cm) * max(height_px, py_from_cm) * 3) / (1024^2), 2)
       
-      # Info Y multiple
       y_info <- if(!is.null(values$multipleY) && values$multipleY) {
         paste0("\n\nCONFIGURATION GRAPHIQUE\n",
                "   Variables Y: ", length(values$yVarNames), " (", 
                paste(values$yVarNames, collapse = ", "), ")\n",
                "   Mode: Superposition multi-séries")
+      } else {
+        ""
+      }
+      
+      x_type_info <- if(input$vizType == "seasonal_evolution") {
+        x_type <- if(input$xVarType == "auto") values$detectedXType else input$xVarType
+        if(x_type %in% c("factor", "categorical", "text")) {
+          paste0("\n\nCONFIGURATION VARIABLE X\n",
+                 "   Type: Catégorielle\n",
+                 "   Ordre personnalisé: ",
+                 if(!is.null(input$xLevelOrder)) "Oui" else "Non")
+        } else {
+          ""
+        }
       } else {
         ""
       }
@@ -6916,7 +7573,8 @@ server <- function(input, output, session) {
         "   DPI configuré: ", dpi_val, "\n",
         "   Qualité: ", quality_level, "\n",
         "   Taille estimée: ", estimated_size_mb, " MB",
-        y_info
+        y_info,
+        x_type_info
       )
       
       showModal(modalDialog(
@@ -6940,6 +7598,21 @@ server <- function(input, output, session) {
   observeEvent(input$applyPreviewSettings, {
     showNotification("✓ Paramètres d'export confirmés", type = "message", duration = 3)
     removeModal()
+  })
+  
+  # Indicateur multi-Y pour l'UI
+  output$multiYIndicator <- reactive({
+    !is.null(values$multipleY) && values$multipleY
+  })
+  outputOptions(output, "multiYIndicator", suspendWhenHidden = FALSE)
+  
+  # Badge nombre de Y
+  observe({
+    if(!is.null(values$multipleY) && values$multipleY) {
+      runjs(paste0("
+      $('#multiYBadge').text('", length(values$yVarNames), " variables');
+    "))
+    }
   })
   # ---- Tests statistiques ----
   output$responseVarSelect <- renderUI({
@@ -9929,7 +10602,12 @@ server <- function(input, output, session) {
     current_plot = NULL,
     label_mapping = NULL,
     label_styles = NULL,
-    data_prepared = FALSE
+    data_prepared = FALSE,
+    selected_y_vars = NULL,
+    y_colors = NULL,
+    auto_update = TRUE,
+    legend_label_mapping = NULL,
+    legend_label_styles = NULL
   )
   
   # Sélection de la variable X
@@ -9941,13 +10619,24 @@ server <- function(input, output, session) {
                 selected = if(length(all_cols) > 0) all_cols[1] else NULL)
   })
   
-  # Sélection de la variable Y
+  # Sélection de la/des variable(s) Y
   output$thresholdYVarSelect <- renderUI({
     req(values$filteredData)
     num_cols <- names(values$filteredData)[sapply(values$filteredData, is.numeric)]
-    selectInput("thresholdYVar", "Variable Y (Efficacité):", 
-                choices = num_cols,
-                selected = if(length(num_cols) > 0) num_cols[1] else NULL)
+    
+    if(input$thresholdMultipleY) {
+      pickerInput("thresholdYVar", "Variables Y (Efficacité) - Sélection multiple:", 
+                  choices = num_cols,
+                  selected = if(length(num_cols) > 0) num_cols[1] else NULL,
+                  multiple = TRUE,
+                  options = list(`actions-box` = TRUE,
+                                 `selected-text-format` = "count > 2",
+                                 `count-selected-text` = "{0} variables sélectionnées"))
+    } else {
+      selectInput("thresholdYVar", "Variable Y (Efficacité):", 
+                  choices = num_cols,
+                  selected = if(length(num_cols) > 0) num_cols[1] else NULL)
+    }
   })
   
   # Filtrage optionnel
@@ -9970,7 +10659,7 @@ server <- function(input, output, session) {
                 options = list(`actions-box` = TRUE))
   })
   
-  # à‰diteur de labels pour la variable X avec options de style
+  # Éditeur de labels pour la variable X avec options de style
   output$thresholdLevelsEditor <- renderUI({
     req(values$filteredData, input$thresholdXVar)
     
@@ -10028,7 +10717,57 @@ server <- function(input, output, session) {
     )
   })
   
-  # Réinitialiser les labels
+  # Éditeur de labels pour la légende (Variables Y multiples)
+  output$thresholdLegendEditor <- renderUI({
+    req(input$thresholdMultipleY, input$thresholdYVar)
+    req(length(input$thresholdYVar) > 1)
+    
+    y_vars <- input$thresholdYVar
+    
+    div(
+      actionButton("resetThresholdLegendLabels", "Réinitialiser", 
+                   class = "btn-default btn-sm", icon = icon("undo"),
+                   style = "margin-bottom: 10px;"),
+      
+      div(style = if(length(y_vars) > 10) "max-height: 400px; overflow-y: auto;" else "",
+          lapply(seq_along(y_vars), function(i) {
+            var_name <- y_vars[i]
+            input_id <- paste0("thresholdLegendLevel_", make.names(var_name))
+            bold_id <- paste0("thresholdLegendLevelBold_", make.names(var_name))
+            italic_id <- paste0("thresholdLegendLevelItalic_", make.names(var_name))
+            
+            div(style = "margin-bottom: 10px; padding: 10px; background-color: #f5f5f5; border-radius: 4px; border-left: 4px solid #9b59b6;",
+                div(style = "display: flex; align-items: center; gap: 10px; margin-bottom: 8px;",
+                    span(paste0(i, "."), style = "color: #9b59b6; font-weight: bold; min-width: 25px; font-size: 14px;"),
+                    div(style = "flex: 1;",
+                        div(style = "font-size: 11px; color: #666; margin-bottom: 3px; font-style: italic;",
+                            paste("Original:", var_name)),
+                        textInput(
+                          inputId = input_id,
+                          label = NULL,
+                          value = var_name,
+                          placeholder = "Nouvelle étiquette...",
+                          width = "100%"
+                        )
+                    )
+                ),
+                div(style = "display: flex; gap: 15px; padding-left: 35px; align-items: center;",
+                    div(style = "display: flex; align-items: center; gap: 5px;",
+                        checkboxInput(bold_id, NULL, value = FALSE, width = "20px"),
+                        tags$label(`for` = bold_id, style = "margin: 0; font-weight: bold; cursor: pointer;", "Gras")
+                    ),
+                    div(style = "display: flex; align-items: center; gap: 5px;",
+                        checkboxInput(italic_id, NULL, value = FALSE, width = "20px"),
+                        tags$label(`for` = italic_id, style = "margin: 0; font-style: italic; cursor: pointer;", "Italique")
+                    )
+                )
+            )
+          })
+      )
+    )
+  })
+  
+  # Réinitialiser les labels X
   observeEvent(input$resetThresholdLabels, {
     req(values$filteredData, input$thresholdXVar)
     
@@ -10045,12 +10784,29 @@ server <- function(input, output, session) {
       updateCheckboxInput(session, paste0("thresholdLevelItalic_", make.names(lvl)), value = FALSE)
     }
     
-    showNotification("à‰tiquettes réinitialisées", type = "message", duration = 2)
+    showNotification("Étiquettes X réinitialisées", type = "message", duration = 2)
   })
   
-  # Color pickers personnalisés
+  # Réinitialiser les labels de légende
+  observeEvent(input$resetThresholdLegendLabels, {
+    req(input$thresholdMultipleY, input$thresholdYVar)
+    req(length(input$thresholdYVar) > 1)
+    
+    y_vars <- input$thresholdYVar
+    
+    for(var_name in y_vars) {
+      updateTextInput(session, paste0("thresholdLegendLevel_", make.names(var_name)), value = var_name)
+      updateCheckboxInput(session, paste0("thresholdLegendLevelBold_", make.names(var_name)), value = FALSE)
+      updateCheckboxInput(session, paste0("thresholdLegendLevelItalic_", make.names(var_name)), value = FALSE)
+    }
+    
+    showNotification("Étiquettes de légende réinitialisées", type = "message", duration = 2)
+  })
+  
+  # Color pickers personnalisés pour les traitements (une seule variable Y)
   output$thresholdColorPickers <- renderUI({
     req(values$filteredData, input$thresholdXVar)
+    req(!input$thresholdMultipleY || length(input$thresholdYVar) == 1)
     
     x_data <- values$filteredData[[input$thresholdXVar]]
     unique_vals <- if(is.factor(x_data)) {
@@ -10076,39 +10832,51 @@ server <- function(input, output, session) {
     )
   })
   
-  # Préparation des données (déclenché par le bouton)
-  observeEvent(input$generateThresholdPlot, {
+  # Préparation automatique des données
+  observe({
     req(values$filteredData, input$thresholdXVar, input$thresholdYVar)
     
     tryCatch({
-      # Préparer les données
-      plot_data <- values$filteredData[, c(input$thresholdXVar, input$thresholdYVar)]
-      colnames(plot_data) <- c("Treatment", "Efficacy")
-      
-      # Supprimer les NA
-      plot_data <- na.omit(plot_data)
-      
-      # Appliquer le filtre
-      if(!is.null(input$thresholdFilter) && length(input$thresholdFilter) > 0) {
-        plot_data <- plot_data[!plot_data$Treatment %in% input$thresholdFilter, ]
+      if(length(input$thresholdYVar) == 1) {
+        plot_data <- values$filteredData[, c(input$thresholdXVar, input$thresholdYVar)]
+        colnames(plot_data) <- c("Treatment", "Efficacy")
+        plot_data <- na.omit(plot_data)
+        
+        if(!is.null(input$thresholdFilter) && length(input$thresholdFilter) > 0) {
+          plot_data <- plot_data[!plot_data$Treatment %in% input$thresholdFilter, ]
+        }
+        
+      } else {
+        plot_data <- values$filteredData[, c(input$thresholdXVar, input$thresholdYVar)]
+        colnames(plot_data)[1] <- "Treatment"
+        
+        plot_data <- tidyr::pivot_longer(plot_data, 
+                                         cols = -Treatment,
+                                         names_to = "Variable",
+                                         values_to = "Efficacy")
+        plot_data <- na.omit(plot_data)
+        
+        if(!is.null(input$thresholdFilter) && length(input$thresholdFilter) > 0) {
+          plot_data <- plot_data[!plot_data$Treatment %in% input$thresholdFilter, ]
+        }
+        
+        threshold_values$y_colors <- NULL
       }
       
       if(nrow(plot_data) == 0) {
-        showNotification("Aucune donnée valide après filtrage", type = "error")
+        threshold_values$data_prepared <- FALSE
         return()
       }
       
-      # Convertir Treatment en caractère puis en facteur
       plot_data$Treatment <- as.character(plot_data$Treatment)
       
-      # Appliquer les labels personnalisés et leurs styles
+      # Appliquer les labels X personnalisés
       unique_treatments <- sort(unique(plot_data$Treatment))
       label_mapping <- sapply(unique_treatments, function(lvl) {
         new_label <- input[[paste0("thresholdLevel_", make.names(lvl))]]
         if(is.null(new_label) || new_label == "") lvl else new_label
       })
       
-      # Stocker les styles pour chaque label
       label_styles <- sapply(unique_treatments, function(lvl) {
         is_bold <- input[[paste0("thresholdLevelBold_", make.names(lvl))]]
         is_italic <- input[[paste0("thresholdLevelItalic_", make.names(lvl))]]
@@ -10116,48 +10884,68 @@ server <- function(input, output, session) {
         if(is.null(is_bold)) is_bold <- FALSE
         if(is.null(is_italic)) is_italic <- FALSE
         
-        if(is_bold && is_italic) {
-          return("bolditalic")
-        } else if(is_bold) {
-          return("bold")
-        } else if(is_italic) {
-          return("italic")
-        } else {
-          return("plain")
-        }
+        if(is_bold && is_italic) "bolditalic"
+        else if(is_bold) "bold"
+        else if(is_italic) "italic"
+        else "plain"
       })
       
-      # Vérifier l'unicité
       if(any(duplicated(label_mapping))) {
-        showNotification("Les étiquettes doivent être uniques", type = "error")
+        threshold_values$data_prepared <- FALSE
         return()
       }
       
-      # Appliquer le mapping
       plot_data$Treatment <- factor(plot_data$Treatment, 
                                     levels = unique_treatments,
                                     labels = label_mapping)
       
-      # Stocker
+      # Appliquer les labels de légende personnalisés pour Y multiples
+      if(length(input$thresholdYVar) > 1) {
+        unique_vars <- unique(plot_data$Variable)
+        
+        legend_label_mapping <- sapply(unique_vars, function(var_name) {
+          new_label <- input[[paste0("thresholdLegendLevel_", make.names(var_name))]]
+          if(is.null(new_label) || new_label == "") var_name else new_label
+        })
+        
+        legend_label_styles <- sapply(unique_vars, function(var_name) {
+          is_bold <- input[[paste0("thresholdLegendLevelBold_", make.names(var_name))]]
+          is_italic <- input[[paste0("thresholdLegendLevelItalic_", make.names(var_name))]]
+          
+          if(is.null(is_bold)) is_bold <- FALSE
+          if(is.null(is_italic)) is_italic <- FALSE
+          
+          if(is_bold && is_italic) "bolditalic"
+          else if(is_bold) "bold"
+          else if(is_italic) "italic"
+          else "plain"
+        })
+        
+        plot_data$Variable <- factor(plot_data$Variable,
+                                     levels = unique_vars,
+                                     labels = legend_label_mapping)
+        
+        threshold_values$legend_label_mapping <- legend_label_mapping
+        threshold_values$legend_label_styles <- legend_label_styles
+      }
+      
       threshold_values$plot_data <- plot_data
       threshold_values$label_mapping <- label_mapping
       threshold_values$label_styles <- label_styles
+      threshold_values$selected_y_vars <- input$thresholdYVar
       threshold_values$data_prepared <- TRUE
       
-      showNotification("Données préparées ! Le graphique se met à  jour automatiquement.", type = "message")
-      
     }, error = function(e) {
-      showNotification(paste("Erreur:", e$message), type = "error")
+      threshold_values$data_prepared <- FALSE
     })
   })
   
-  # Génération réactive du graphique (mise à  jour automatique)
+  # Génération réactive du graphique
   threshold_plot_reactive <- reactive({
-    # Attendre que les données soient préparées
     req(threshold_values$data_prepared)
     req(threshold_values$plot_data)
     
-    # Dépendances pour la mise à  jour automatique
+    # Dépendances pour mise à jour automatique
     input$thresholdValue
     input$thresholdColor
     input$thresholdLineWidth
@@ -10186,59 +10974,101 @@ server <- function(input, output, session) {
     input$thresholdYMax
     input$thresholdShowLegend
     input$thresholdLegendPosition
+    input$thresholdLegendTitle
+    input$thresholdLegendBold
+    input$thresholdLegendItalic
+    input$thresholdBarWidth
+    input$thresholdBarSpacing
+    input$thresholdBarPosition
+    
+    lapply(names(threshold_values$label_mapping), function(lvl) {
+      input[[paste0("thresholdLevel_", make.names(lvl))]]
+      input[[paste0("thresholdLevelBold_", make.names(lvl))]]
+      input[[paste0("thresholdLevelItalic_", make.names(lvl))]]
+    })
+    
+    if(length(threshold_values$selected_y_vars) > 1) {
+      lapply(threshold_values$selected_y_vars, function(var_name) {
+        input[[paste0("thresholdLegendLevel_", make.names(var_name))]]
+        input[[paste0("thresholdLegendLevelBold_", make.names(var_name))]]
+        input[[paste0("thresholdLegendLevelItalic_", make.names(var_name))]]
+      })
+    }
+    
+    if(!is.null(input$thresholdBarColor) && input$thresholdBarColor == "custom") {
+      lapply(seq_along(levels(threshold_values$plot_data$Treatment)), function(i) {
+        input[[paste0("thresholdCustomColor_", i)]]
+      })
+    }
     
     plot_data <- threshold_values$plot_data
     label_styles <- threshold_values$label_styles
+    is_multiple_y <- length(threshold_values$selected_y_vars) > 1
     
     tryCatch({
-      # Créer le graphique
-      p <- ggplot(plot_data, aes(x = Treatment, y = Efficacy))
-      
-      # Coloration des barres
-      if(input$thresholdUseColor) {
-        if(input$thresholdBarColor == "ggplot") {
-          # Couleurs par défaut de ggplot2
-          p <- p + geom_col(aes(fill = Treatment), alpha = 0.8)
-        } else if(input$thresholdBarColor == "custom") {
-          # Couleurs personnalisées par traitement
-          custom_colors <- sapply(seq_along(levels(plot_data$Treatment)), function(i) {
-            color_input <- input[[paste0("thresholdCustomColor_", i)]]
-            if(is.null(color_input)) "#3498db" else color_input
-          })
-          p <- p + geom_col(aes(fill = Treatment), alpha = 0.8) +
-            scale_fill_manual(values = custom_colors)
-        } else if(input$thresholdBarColor == "palette") {
-          # Palette de couleurs
-          p <- p + geom_col(aes(fill = Treatment), alpha = 0.8) +
-            scale_fill_brewer(palette = input$thresholdPalette)
-        } else if(input$thresholdBarColor == "black") {
-          # Barres noires
-          p <- p + geom_col(fill = "#000000", alpha = 0.8)
-        } else if(input$thresholdBarColor == "single") {
-          # Couleur unique personnalisée
-          p <- p + geom_col(fill = input$thresholdSingleBarColor, alpha = 0.8)
+      if(is_multiple_y) {
+        p <- ggplot(plot_data, aes(x = Treatment, y = Efficacy, fill = Variable))
+        
+        # Calcul de la largeur avec espacement
+        bar_width <- (input$thresholdBarWidth %||% 0.8)
+        dodge_width <- bar_width + (input$thresholdBarSpacing %||% 0.1)
+        
+        position <- if(!is.null(input$thresholdBarPosition) && input$thresholdBarPosition == "stack") {
+          "stack"
+        } else {
+          position_dodge(width = dodge_width)
         }
+        
+        p <- p + geom_col(position = position, 
+                          width = bar_width,
+                          alpha = 0.8)
+        
+        p <- p + labs(fill = input$thresholdLegendTitle %||% "Variables")
+        
       } else {
-        # Couleur par défaut
-        p <- p + geom_col(fill = "#3498db", alpha = 0.8)
+        p <- ggplot(plot_data, aes(x = Treatment, y = Efficacy))
+        
+        bar_width <- input$thresholdBarWidth %||% 0.8
+        
+        if(input$thresholdUseColor) {
+          if(input$thresholdBarColor == "ggplot") {
+            p <- p + geom_col(aes(fill = Treatment), width = bar_width, alpha = 0.8)
+          } else if(input$thresholdBarColor == "palette") {
+            p <- p + geom_col(aes(fill = Treatment), width = bar_width, alpha = 0.8) +
+              scale_fill_brewer(palette = input$thresholdPalette %||% "Set1",
+                                name = input$thresholdLegendTitle %||% "Traitements")
+          } else if(input$thresholdBarColor == "custom") {
+            custom_colors <- sapply(seq_along(levels(plot_data$Treatment)), function(i) {
+              color_input <- input[[paste0("thresholdCustomColor_", i)]]
+              if(is.null(color_input)) scales::hue_pal()(length(levels(plot_data$Treatment)))[i] else color_input
+            })
+            p <- p + geom_col(aes(fill = Treatment), width = bar_width, alpha = 0.8) +
+              scale_fill_manual(values = custom_colors,
+                                name = input$thresholdLegendTitle %||% "Traitements")
+          } else if(input$thresholdBarColor == "black") {
+            p <- p + geom_col(fill = "#000000", width = bar_width, alpha = 0.8)
+          } else if(input$thresholdBarColor == "single") {
+            p <- p + geom_col(fill = input$thresholdSingleBarColor %||% "#3498db", 
+                              width = bar_width, alpha = 0.8)
+          }
+        } else {
+          p <- p + geom_col(fill = "#3498db", width = bar_width, alpha = 0.8)
+        }
       }
       
-      # Ligne de seuil avec type de ligne personnalisable
-      p <- p + geom_hline(yintercept = input$thresholdValue, 
-                          color = input$thresholdColor,
-                          linewidth = input$thresholdLineWidth,
-                          linetype = input$thresholdLineType)
+      p <- p + geom_hline(yintercept = input$thresholdValue %||% 80, 
+                          color = input$thresholdColor %||% "#e74c3c",
+                          linewidth = input$thresholdLineWidth %||% 1.5,
+                          linetype = input$thresholdLineType %||% "solid")
       
-      # Annotations pour le seuil
       p <- p + annotate("text", 
                         x = length(levels(plot_data$Treatment)) * 0.9,
-                        y = input$thresholdValue + 5,
-                        label = paste("Seuil:", input$thresholdValue, "%"),
-                        color = input$thresholdColor,
+                        y = (input$thresholdValue %||% 80) + 5,
+                        label = paste("Seuil:", input$thresholdValue %||% 80, "%"),
+                        color = input$thresholdColor %||% "#e74c3c",
                         fontface = "bold",
                         size = 4)
       
-      # Titres et labels
       plot_title <- if(!is.null(input$thresholdPlotTitle) && input$thresholdPlotTitle != "") {
         input$thresholdPlotTitle
       } else {
@@ -10257,7 +11087,6 @@ server <- function(input, output, session) {
         "Seuil d'efficacité (%)"
       }
       
-      # Déterminer le style des labels d'axes
       x_label_face <- if(input$thresholdXLabelBold && input$thresholdXLabelItalic) {
         "bold.italic"
       } else if(input$thresholdXLabelBold) {
@@ -10278,41 +11107,67 @@ server <- function(input, output, session) {
         "plain"
       }
       
-      # Couleur des axes
-      axis_color <- if(input$thresholdBlackAxes) "black" else "grey50"
+      legend_title_face <- if(input$thresholdLegendBold && input$thresholdLegendItalic) {
+        "bold.italic"
+      } else if(input$thresholdLegendBold) {
+        "bold"
+      } else if(input$thresholdLegendItalic) {
+        "italic"
+      } else {
+        "plain"
+      }
       
-      # Position de la légende
+      axis_color <- if(!is.null(input$thresholdBlackAxes) && input$thresholdBlackAxes) {
+        "black"
+      } else {
+        "grey50"
+      }
+      
       legend_position <- if(!is.null(input$thresholdShowLegend) && input$thresholdShowLegend) {
-        if(!is.null(input$thresholdLegendPosition)) input$thresholdLegendPosition else "bottom"
+        pos <- input$thresholdLegendPosition %||% "bottom"
+        if(pos == "top_right") c(0.95, 0.95)
+        else if(pos == "top_left") c(0.05, 0.95)
+        else if(pos == "bottom_right") c(0.95, 0.05)
+        else if(pos == "bottom_left") c(0.05, 0.05)
+        else pos
       } else {
         "none"
       }
       
-      # Afficher la légende seulement si nécessaire
-      show_legend <- input$thresholdUseColor && 
-        input$thresholdBarColor %in% c("ggplot", "custom", "palette") &&
-        legend_position != "none"
+      legend_justification <- if(!is.null(input$thresholdLegendPosition)) {
+        pos <- input$thresholdLegendPosition
+        if(pos == "top_right") c(1, 1)
+        else if(pos == "top_left") c(0, 1)
+        else if(pos == "bottom_right") c(1, 0)
+        else if(pos == "bottom_left") c(0, 0)
+        else "center"
+      } else {
+        "center"
+      }
       
-      # Thème et personnalisation
+      show_legend <- (is_multiple_y || (input$thresholdUseColor && 
+                                          input$thresholdBarColor %in% c("ggplot", "custom", "palette"))) &&
+        (!is.character(legend_position) || legend_position != "none")
+      
       p <- p + labs(title = plot_title, x = x_label, y = y_label) +
-        scale_y_continuous(limits = c(input$thresholdYMin, input$thresholdYMax)) +
+        scale_y_continuous(limits = c(input$thresholdYMin %||% 0, input$thresholdYMax %||% 100)) +
         theme_minimal() +
         theme(
-          plot.title = element_text(size = input$thresholdTitleSize, 
+          plot.title = element_text(size = input$thresholdTitleSize %||% 16, 
                                     hjust = 0.5, face = "bold"),
-          axis.title.x = element_text(size = input$thresholdAxisTitleSize, 
+          axis.title.x = element_text(size = input$thresholdAxisTitleSize %||% 14, 
                                       face = x_label_face,
                                       color = axis_color),
-          axis.title.y = element_text(size = input$thresholdAxisTitleSize, 
+          axis.title.y = element_text(size = input$thresholdAxisTitleSize %||% 14, 
                                       face = y_label_face,
                                       color = axis_color),
-          axis.text.y = element_text(size = input$thresholdAxisTextSize,
+          axis.text.y = element_text(size = input$thresholdAxisTextSize %||% 12,
                                      color = axis_color),
           axis.text.x = if(input$thresholdRotateLabels) {
             element_text(angle = 45, hjust = 1, color = axis_color, 
-                         size = input$thresholdAxisTextSize)
+                         size = input$thresholdAxisTextSize %||% 12)
           } else {
-            element_text(color = axis_color, size = input$thresholdAxisTextSize)
+            element_text(color = axis_color, size = input$thresholdAxisTextSize %||% 12)
           },
           axis.line = if(input$thresholdShowAxisLines) {
             element_line(color = axis_color, linewidth = 0.5)
@@ -10325,8 +11180,14 @@ server <- function(input, output, session) {
             element_blank()
           },
           legend.position = if(show_legend) legend_position else "none",
-          legend.title = element_text(size = input$thresholdLegendSize, face = "bold"),
-          legend.text = element_text(size = input$thresholdLegendSize),
+          legend.justification = if(show_legend && is.numeric(legend_position)) legend_justification else NULL,
+          legend.background = if(show_legend && is.numeric(legend_position)) {
+            element_rect(fill = "white", color = "grey80", linewidth = 0.5)
+          } else {
+            element_blank()
+          },
+          legend.title = element_text(size = input$thresholdLegendSize %||% 10, face = legend_title_face),
+          legend.text = element_text(size = input$thresholdLegendSize %||% 10),
           panel.grid.major = if(input$thresholdShowGrid) {
             element_line(color = "grey90")
           } else {
@@ -10340,16 +11201,12 @@ server <- function(input, output, session) {
           }
         )
       
-      # Appliquer les styles personnalisés aux labels X si définis
       if(!is.null(label_styles) && length(label_styles) > 0) {
-        # Créer des expressions avec markdown/plotmath pour les styles
         treatment_levels <- levels(plot_data$Treatment)
         
-        # Mapper les styles aux niveaux actuels du facteur
         styled_labels <- sapply(seq_along(treatment_levels), function(i) {
           current_label <- as.character(treatment_levels[i])
           
-          # Trouver le style correspondant dans label_mapping
           original_treatments <- names(threshold_values$label_mapping)
           idx <- which(threshold_values$label_mapping == current_label)
           
@@ -10367,29 +11224,27 @@ server <- function(input, output, session) {
           return(current_label)
         })
         
-        # Appliquer les labels stylisés
         p <- p + scale_x_discrete(labels = styled_labels)
       }
       
-      # Stocker le graphique
       threshold_values$current_plot <- p
       
       return(p)
       
     }, error = function(e) {
-      showNotification(paste("Erreur lors de la mise à  jour:", e$message), type = "error")
+      showNotification(paste("Erreur lors de la mise à jour:", e$message), type = "error", duration = 5)
       return(NULL)
     })
   })
   
-  # Affichage du graphique avec mise à  jour automatique
+  # Affichage du graphique avec mise à jour automatique
   output$thresholdPlot <- renderPlotly({
     p <- threshold_plot_reactive()
     req(p)
     
-    # Déterminer si la légende doit être affichée
+    is_multiple_y <- length(threshold_values$selected_y_vars) > 1
     show_legend <- if(!is.null(input$thresholdShowLegend) && input$thresholdShowLegend) {
-      input$thresholdUseColor && input$thresholdBarColor %in% c("ggplot", "custom", "palette")
+      is_multiple_y || (input$thresholdUseColor && input$thresholdBarColor %in% c("ggplot", "custom", "palette"))
     } else {
       FALSE
     }
@@ -10417,30 +11272,151 @@ server <- function(input, output, session) {
               ))
   })
   
-  # Téléchargement du graphique
+  # Téléchargement du graphique avec correction DPI
   output$downloadThresholdPlot <- downloadHandler(
     filename = function() {
-      paste0("seuils_efficacite_", Sys.Date(), ".png")
+      format <- input$thresholdExportFormat %||% "png"
+      paste0("seuils_efficacite_", Sys.Date(), ".", format)
     },
     content = function(file) {
       req(threshold_values$current_plot)
       
-      width <- input$thresholdExportWidth %||% 10
-      height <- input$thresholdExportHeight %||% 8
+      # Paramètres d'export
+      width_px <- input$thresholdExportWidth %||% 1200
+      height_px <- input$thresholdExportHeight %||% 800
       dpi <- input$thresholdExportDPI %||% 300
       
-      ggsave(file, 
-             plot = threshold_values$current_plot,
-             width = width,
-             height = height,
-             dpi = dpi,
-             device = "png",
-             type = "cairo")
+      # CORRECTION: Limiter le DPI max à 1200 pour éviter les problèmes
+      if(dpi > 20000) {
+        showNotification(
+          paste0("⚠ DPI réduit de ", dpi, " à 20000 pour assurer la compatibilité.\n",
+                 "Pour des résolutions supérieures, utilisez les formats vectoriels (SVG, PDF, EPS)."), 
+          type = "warning", 
+          duration = 6
+        )
+        dpi <- 20000
+      }
       
-      showNotification(paste0("Graphique exporté avec succès: ", dpi, " DPI"), 
-                       type = "message", duration = 3)
+      # Calculer les dimensions en pouces de manière sûre
+      width_in <- max(width_px / dpi, 1)
+      height_in <- max(height_px / dpi, 1)
+      
+      # Limiter les dimensions maximales en pouces pour éviter les erreurs
+      max_inches <- 200
+      if(width_in > max_inches) {
+        width_in <- max_inches
+        showNotification("⚠ Largeur limitée à 200 pouces", type = "warning", duration = 3)
+      }
+      if(height_in > max_inches) {
+        height_in <- max_inches
+        showNotification("⚠ Hauteur limitée à 200 pouces", type = "warning", duration = 3)
+      }
+      
+      format <- input$thresholdExportFormat %||% "png"
+      
+      # Gérer les différents formats
+      tryCatch({
+        if(format == "svg") {
+          ggsave(file, 
+                 plot = threshold_values$current_plot,
+                 width = width_in,
+                 height = height_in,
+                 device = "svg")
+        } else if(format == "pdf") {
+          ggsave(file, 
+                 plot = threshold_values$current_plot,
+                 width = width_in,
+                 height = height_in,
+                 device = "pdf")
+        } else if(format == "eps") {
+          ggsave(file, 
+                 plot = threshold_values$current_plot,
+                 width = width_in,
+                 height = height_in,
+                 device = "eps")
+        } else if(format == "tiff") {
+          ggsave(file, 
+                 plot = threshold_values$current_plot,
+                 width = width_in,
+                 height = height_in,
+                 dpi = dpi,
+                 device = "tiff",
+                 compression = "lzw")
+        } else if(format == "bmp") {
+          ggsave(file, 
+                 plot = threshold_values$current_plot,
+                 width = width_in,
+                 height = height_in,
+                 dpi = dpi,
+                 device = "bmp")
+        } else if(format == "jpeg") {
+          ggsave(file, 
+                 plot = threshold_values$current_plot,
+                 width = width_in,
+                 height = height_in,
+                 dpi = dpi,
+                 device = "jpeg",
+                 quality = 95)
+        } else {
+          # PNG par défaut
+          ggsave(file, 
+                 plot = threshold_values$current_plot,
+                 width = width_in,
+                 height = height_in,
+                 dpi = dpi,
+                 device = "png",
+                 type = "cairo")
+        }
+        
+        showNotification(
+          paste0("✓ Graphique exporté avec succès\n",
+                 "Format: ", toupper(format), "\n",
+                 "Dimensions: ", round(width_in, 2), "×", round(height_in, 2), " pouces\n",
+                 "Résolution: ", dpi, " DPI"), 
+          type = "message", 
+          duration = 5
+        )
+        
+      }, error = function(e) {
+        showNotification(
+          paste0("✗ Erreur lors de l'export: ", e$message,
+                 "\n\nConseils:",
+                 "\n• Réduisez les dimensions ou le DPI",
+                 "\n• Utilisez un format vectoriel (SVG, PDF) pour haute résolution",
+                 "\n• Maximum recommandé: 5000×5000 px à 600 DPI"), 
+          type = "error", 
+          duration = 10
+        )
+      })
     }
   )
+  
+  # Calcul de l'estimation de la taille du fichier
+  output$exportSizeEstimate <- renderText({
+    width <- input$thresholdExportWidth %||% 1200
+    height <- input$thresholdExportHeight %||% 800
+    dpi <- input$thresholdExportDPI %||% 300
+    format <- input$thresholdExportFormat %||% "png"
+    
+    # Limiter DPI affiché
+    dpi_display <- min(dpi, 20000)
+    warning_text <- if(dpi > 20000) " (DPI sera limité à 1200)" else ""
+    
+    width_in <- round(width / dpi_display, 2)
+    height_in <- round(height / dpi_display, 2)
+    
+    pixels <- width * height
+    size_mb <- if(format %in% c("png", "tiff", "bmp")) {
+      (pixels * 3) / (1024 * 1024)
+    } else if(format == "jpeg") {
+      (pixels * 0.3) / (1024 * 1024)
+    } else {
+      0.5
+    }
+    
+    paste0(width, "×", height, " pixels = ", width_in, "×", height_in, " pouces à ", dpi_display, " DPI",
+           warning_text, " | Taille estimée : ", round(size_mb, 2), " MB")
+  })
   
   # Téléchargement des données
   output$downloadThresholdData <- downloadHandler(
@@ -10470,26 +11446,42 @@ server <- function(input, output, session) {
       openxlsx::addStyle(wb, "Données", headerStyle, rows = 1, cols = 1:ncol(threshold_values$plot_data), gridExpand = TRUE)
       
       # Ajouter les paramètres
+      y_vars_text <- if(length(threshold_values$selected_y_vars) > 1) {
+        paste(threshold_values$selected_y_vars, collapse = ", ")
+      } else {
+        threshold_values$selected_y_vars
+      }
+      
       params <- data.frame(
         Paramètre = c("Seuil d'efficacité (%)", 
                       "Variable X", 
-                      "Variable Y",
+                      "Variable(s) Y",
                       "Date d'export",
                       "Nombre de traitements",
-                      "Limites Y"),
-        Valeur = c(input$thresholdValue, 
+                      "Limites Y",
+                      "Format d'export",
+                      "Dimensions (pixels)",
+                      "Résolution (DPI)",
+                      "Largeur barres",
+                      "Espacement barres"),
+        Valeur = c(input$thresholdValue %||% 80, 
                    input$thresholdXVar, 
-                   input$thresholdYVar,
+                   y_vars_text,
                    as.character(Sys.Date()),
-                   nrow(threshold_values$plot_data),
-                   paste(input$thresholdYMin, "-", input$thresholdYMax))
+                   length(unique(threshold_values$plot_data$Treatment)),
+                   paste(input$thresholdYMin %||% 0, "-", input$thresholdYMax %||% 100),
+                   input$thresholdExportFormat %||% "png",
+                   paste(input$thresholdExportWidth %||% 1200, "×", input$thresholdExportHeight %||% 800),
+                   input$thresholdExportDPI %||% 300,
+                   input$thresholdBarWidth %||% 0.8,
+                   input$thresholdBarSpacing %||% 0.1)
       )
       
       openxlsx::addWorksheet(wb, "Paramètres")
       openxlsx::writeData(wb, "Paramètres", params)
       openxlsx::addStyle(wb, "Paramètres", headerStyle, rows = 1, cols = 1:2, gridExpand = TRUE)
       
-      # Ajouter le mapping des labels si disponible
+      # Ajouter le mapping des labels X
       if(!is.null(threshold_values$label_mapping)) {
         label_info <- data.frame(
           Label_Original = names(threshold_values$label_mapping),
@@ -10501,21 +11493,41 @@ server <- function(input, output, session) {
           }
         )
         
-        openxlsx::addWorksheet(wb, "Labels")
-        openxlsx::writeData(wb, "Labels", label_info)
-        openxlsx::addStyle(wb, "Labels", headerStyle, rows = 1, cols = 1:3, gridExpand = TRUE)
+        openxlsx::addWorksheet(wb, "Labels X")
+        openxlsx::writeData(wb, "Labels X", label_info)
+        openxlsx::addStyle(wb, "Labels X", headerStyle, rows = 1, cols = 1:3, gridExpand = TRUE)
+      }
+      
+      # Ajouter le mapping des labels de légende (Y multiples)
+      if(!is.null(threshold_values$legend_label_mapping)) {
+        legend_info <- data.frame(
+          Variable_Originale = names(threshold_values$legend_label_mapping),
+          Label_Légende = as.character(threshold_values$legend_label_mapping),
+          Style = if(!is.null(threshold_values$legend_label_styles)) {
+            threshold_values$legend_label_styles
+          } else {
+            rep("plain", length(threshold_values$legend_label_mapping))
+          }
+        )
+        
+        openxlsx::addWorksheet(wb, "Labels Légende")
+        openxlsx::writeData(wb, "Labels Légende", legend_info)
+        openxlsx::addStyle(wb, "Labels Légende", headerStyle, rows = 1, cols = 1:3, gridExpand = TRUE)
       }
       
       # Ajuster les largeurs de colonnes
       openxlsx::setColWidths(wb, "Données", cols = 1:ncol(threshold_values$plot_data), widths = "auto")
       openxlsx::setColWidths(wb, "Paramètres", cols = 1:2, widths = c(25, 30))
       if(!is.null(threshold_values$label_mapping)) {
-        openxlsx::setColWidths(wb, "Labels", cols = 1:3, widths = c(20, 25, 15))
+        openxlsx::setColWidths(wb, "Labels X", cols = 1:3, widths = c(20, 25, 15))
+      }
+      if(!is.null(threshold_values$legend_label_mapping)) {
+        openxlsx::setColWidths(wb, "Labels Légende", cols = 1:3, widths = c(20, 25, 15))
       }
       
       openxlsx::saveWorkbook(wb, file, overwrite = TRUE)
       
-      showNotification("Données exportées avec succès!", type = "message", duration = 3)
+      showNotification("✓ Données exportées avec succès!", type = "message", duration = 3)
     }
   )
   # ---- Rapport ----
